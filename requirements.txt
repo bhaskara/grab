@@ -1,0 +1,4 @@
+Flask==2.3.3
+Flask-SocketIO==5.3.6
+pytest==7.4.2
+pytest-flask==1.2.0
