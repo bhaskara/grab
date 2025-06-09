@@ -17,3 +17,11 @@ This is a web-based implementation of "Grab" - a word game played with Scrabble 
 ## Project Status
 
 Currently in prototype phase - not designed for large scale deployment. Focus is on core gameplay mechanics and real-time communication patterns.
+
+## Style guidelines
+
+This project is for learning, so please document things.  It doesn't have to be overly verbose, but brief explanations of things will be helpful:
+- Each directory should have a README.md explaining what's in this directory.
+- Each file should have a comment at the top explaining what it contains.
+- Each class, function, method, and test should have a docstring.
+
