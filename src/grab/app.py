@@ -36,4 +36,7 @@ def create_app(config=None):
     from . import routes
     app.register_blueprint(routes.bp)
     
+    from . import api
+    app.register_blueprint(api.api_bp)
+    
     return app, socketio

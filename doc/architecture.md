@@ -6,3 +6,4 @@ The server will be implemented using Flask and all state is in-memory within the
 
 Each game is *mostly* event-driven, in that it responds to player moves and sends back state.  However, given that the state can also progress independently (turns can end after a time limit elapses) we'll also need some sort of timer mechanism per game to tick the clock and possibly make updates as a result.
 
+@server-api.md
