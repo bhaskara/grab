@@ -8,7 +8,7 @@ When you run it, it will prompt you for a username and then connect to the serve
 Once you enter it, you can choose between a few commands:
 - start NEW_GAME_ID (starts new game)
 - join GAME_ID (joins existing game)
-- leave GAME_ID (leaves previously joined game)
+- stop GAME_ID (stops running game)
 - exit (exit script)
 
 After each command other than exit, the script:
@@ -108,19 +108,19 @@ class GrabAPIClient:
             print("✗ Invalid JSON response from server")
             return False
     
-    def leave_game(self, game_id: str) -> bool:
-        """Leave a game."""
-        url = f"{self.server_url}/api/games/{game_id}/leave"
+    def stop_game(self, game_id: str) -> bool:
+        """Stop a game."""
+        url = f"{self.server_url}/api/games/{game_id}"
         
         try:
             response = requests.delete(url, headers=self._get_auth_headers())
             result = response.json()
             
             if response.status_code == 200 and result.get('success'):
-                print(f"✓ Successfully left game {game_id}")
+                print(f"✓ Successfully stopped game {game_id}")
                 return True
             else:
-                print(f"✗ Failed to leave game: {result.get('error', 'Unknown error')}")
+                print(f"✗ Failed to stop game: {result.get('error', 'Unknown error')}")
                 return False
         except requests.exceptions.RequestException as e:
             print(f"✗ Connection error: {e}")
@@ -243,7 +243,7 @@ def main():
     print("  start - Create a new game")
     print("  start_game <game_id> - Start an existing game")
     print("  join <game_id> - Join an existing game")
-    print("  leave <game_id> - Leave a game")
+    print("  stop <game_id> - Stop a game")
     print("  exit - Exit the program")
     print("\nNote: After creating a game, you need to join it before starting it.")
     
@@ -279,15 +279,15 @@ def main():
             game_id = parts[1]
             if client.join_game(game_id):
                 client.display_server_status()
-        elif cmd == "leave":
+        elif cmd == "stop":
             if len(parts) != 2:
-                print("Usage: leave <game_id>")
+                print("Usage: stop <game_id>")
                 continue
             game_id = parts[1]
-            if client.leave_game(game_id):
+            if client.stop_game(game_id):
                 client.display_server_status()
         else:
-            print("Unknown command. Available commands: start, start_game <game_id>, join <game_id>, leave <game_id>, exit")
+            print("Unknown command. Available commands: start, start_game <game_id>, join <game_id>, stop <game_id>, exit")
 
 
 if __name__ == "__main__":
