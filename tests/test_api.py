@@ -418,47 +418,6 @@ class TestPlayerGameAssociation:
         assert data['success'] is False
         assert 'Player already in game' in data['error']
     
-    def test_leave_game_success(self, client, auth_headers):
-        """Test successful game leave."""
-        # Create and join a game
-        create_response = client.post('/api/games', 
-                                     json={},
-                                     headers=auth_headers,
-                                     content_type='application/json')
-        game_id = json.loads(create_response.data)['data']['game_id']
-        client.post(f'/api/games/{game_id}/join', headers=auth_headers)
-        
-        # Leave the game
-        response = client.delete(f'/api/games/{game_id}/leave', headers=auth_headers)
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert data['success'] is True
-        assert data['data']['game_id'] == game_id
-        assert 'left_at' in data['data']
-    
-    def test_leave_game_not_found(self, client, auth_headers):
-        """Test leaving non-existent game."""
-        response = client.delete('/api/games/nonexistent/leave', headers=auth_headers)
-        assert response.status_code == 404
-        data = json.loads(response.data)
-        assert data['success'] is False
-        assert 'Game not found' in data['error']
-    
-    def test_leave_game_not_in_game(self, client, auth_headers):
-        """Test leaving game player is not in."""
-        # Create a game but don't join
-        create_response = client.post('/api/games', 
-                                     json={},
-                                     headers=auth_headers,
-                                     content_type='application/json')
-        game_id = json.loads(create_response.data)['data']['game_id']
-        
-        # Try to leave without joining
-        response = client.delete(f'/api/games/{game_id}/leave', headers=auth_headers)
-        assert response.status_code == 404
-        data = json.loads(response.data)
-        assert data['success'] is False
-        assert 'Player not in game' in data['error']
 
 class TestWebSocketConnection:
     """Test WebSocket connection endpoint."""

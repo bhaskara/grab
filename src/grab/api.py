@@ -375,37 +375,6 @@ def join_game(game_id):
         }
     }), 200
 
-@api_bp.route('/games/<game_id>/leave', methods=['DELETE'])
-@require_auth
-def leave_game(game_id):
-    """Remove the authenticated player from a game."""
-    if game_id not in games_metadata:
-        return jsonify({'success': False, 'error': 'Game not found'}), 404
-    
-    username = request.current_user['username']
-    
-    # Check if player is in this game
-    try:
-        state, players = game_server.get_game_info(game_id)
-        if username not in players:
-            return jsonify({'success': False, 'error': 'Player not in game'}), 404
-    except KeyError:
-        return jsonify({'success': False, 'error': 'Game not found'}), 404
-    
-    # Note: The current GameServer implementation doesn't have a remove_player_from_game method
-    # This would need to be implemented for full functionality
-    # For now, we'll just return success but the player won't actually be removed from the game server
-    
-    left_at = datetime.now(timezone.utc).isoformat() + 'Z'
-    
-    return jsonify({
-        'success': True,
-        'data': {
-            'game_id': game_id,
-            'player_id': request.current_user['player_id'],
-            'left_at': left_at
-        }
-    }), 200
 
 @api_bp.route('/games/<game_id>/connect')
 @require_auth

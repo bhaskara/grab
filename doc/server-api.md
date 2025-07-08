@@ -254,31 +254,6 @@ Authorization: Bearer <session_token>
 
 ---
 
-#### `DELETE /api/games/{game_id}/leave`
-Removes the authenticated player from a game.
-
-**Headers:**
-```
-Authorization: Bearer <session_token>
-```
-
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "data": {
-    "game_id": "ABC123",
-    "player_id": "uuid-string",
-    "left_at": "2025-06-11T10:33:00Z"
-  }
-}
-```
-
-**Errors:**
-- `401` - Invalid or missing session token
-- `404` - Game not found or player not in game
-
----
 
 ### 4. WebSocket Connection
 
