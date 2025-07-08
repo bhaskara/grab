@@ -91,6 +91,47 @@ Authorization: Bearer <session_token>
 
 ---
 
+#### `GET /api/games`
+Gets information about all games on the server.
+
+**Headers:**
+```
+Authorization: Bearer <session_token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "games": [
+      {
+        "game_id": "ABC123",
+        "status": "waiting|active|finished",
+        "max_players": 4,
+        "current_players": [
+          {
+            "player_id": "uuid-string",
+            "username": "string",
+            "joined_at": "2025-06-11T10:31:00Z"
+          }
+        ],
+        "creator_id": "uuid-string",
+        "created_at": "2025-06-11T10:30:00Z",
+        "started_at": "2025-06-11T10:32:00Z",  // null if not started
+        "finished_at": "2025-06-11T10:45:00Z"  // null if not finished
+      }
+    ],
+    "total_games": 1
+  }
+}
+```
+
+**Errors:**
+- `401` - Invalid or missing session token
+
+---
+
 #### `GET /api/games/{game_id}`
 Gets information about a specific game.
 

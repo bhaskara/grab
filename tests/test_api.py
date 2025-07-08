@@ -209,6 +209,62 @@ class TestGameManagement:
         assert data['success'] is False
         assert 'Game not found' in data['error']
     
+    def test_get_all_games_empty(self, client, auth_headers):
+        """Test getting all games when no games exist."""
+        response = client.get('/api/games', headers=auth_headers)
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['success'] is True
+        assert data['data']['games'] == []
+        assert data['data']['total_games'] == 0
+    
+    def test_get_all_games_with_games(self, client, auth_headers, second_auth_headers):
+        """Test getting all games when games exist."""
+        # Create two games
+        create_response1 = client.post('/api/games', 
+                                      json={'max_players': 2},
+                                      headers=auth_headers,
+                                      content_type='application/json')
+        assert create_response1.status_code == 201
+        game_id1 = json.loads(create_response1.data)['data']['game_id']
+        
+        create_response2 = client.post('/api/games', 
+                                      json={'max_players': 4},
+                                      headers=second_auth_headers,
+                                      content_type='application/json')
+        assert create_response2.status_code == 201
+        game_id2 = json.loads(create_response2.data)['data']['game_id']
+        
+        # Join first game
+        client.post(f'/api/games/{game_id1}/join', headers=auth_headers)
+        
+        # Get all games
+        response = client.get('/api/games', headers=auth_headers)
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['success'] is True
+        assert len(data['data']['games']) == 2
+        assert data['data']['total_games'] == 2
+        
+        # Verify game data structure
+        games = data['data']['games']
+        game_ids = [game['game_id'] for game in games]
+        assert game_id1 in game_ids
+        assert game_id2 in game_ids
+        
+        # Find the first game and verify it has a player
+        game1_data = next(game for game in games if game['game_id'] == game_id1)
+        assert game1_data['status'] == 'waiting'
+        assert game1_data['max_players'] == 2
+        assert len(game1_data['current_players']) == 1
+        assert game1_data['current_players'][0]['username'] == 'testuser'
+        
+        # Find the second game and verify it has no players
+        game2_data = next(game for game in games if game['game_id'] == game_id2)
+        assert game2_data['status'] == 'waiting'
+        assert game2_data['max_players'] == 4
+        assert len(game2_data['current_players']) == 0
+    
     def test_start_game_success(self, client, auth_headers):
         """Test successful game start."""
         # Create a game

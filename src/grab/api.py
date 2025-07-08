@@ -147,6 +147,53 @@ def create_game():
         }
     }), 201
 
+@api_bp.route('/games', methods=['GET'])
+@require_auth
+def get_all_games():
+    """Get information about all games on the server."""
+    games_list = []
+    
+    for game_id, game_meta in games_metadata.items():
+        # Get current players from game server
+        try:
+            state, players = game_server.get_game_info(game_id)
+            current_players = []
+            for username in players:
+                # Find player_id for this username
+                player_id = None
+                for session_data in active_sessions.values():
+                    if session_data['username'] == username:
+                        player_id = session_data['player_id']
+                        break
+                
+                if player_id:
+                    current_players.append({
+                        'player_id': player_id,
+                        'username': username,
+                        'joined_at': game_meta['created_at']  # Simplified for now
+                    })
+        except KeyError:
+            current_players = []
+        
+        games_list.append({
+            'game_id': game_id,
+            'status': game_meta['status'],
+            'max_players': game_meta['max_players'],
+            'current_players': current_players,
+            'creator_id': game_meta['creator_id'],
+            'created_at': game_meta['created_at'],
+            'started_at': game_meta['started_at'],
+            'finished_at': game_meta['finished_at']
+        })
+    
+    return jsonify({
+        'success': True,
+        'data': {
+            'games': games_list,
+            'total_games': len(games_list)
+        }
+    }), 200
+
 @api_bp.route('/games/<game_id>', methods=['GET'])
 @require_auth
 def get_game(game_id):
