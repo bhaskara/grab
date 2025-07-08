@@ -23,7 +23,8 @@ def create_app(config=None):
     # Default configuration
     app.config.update({
         'SECRET_KEY': 'dev-key-change-in-production',
-        'DEBUG': True
+        'DEBUG': True,
+        'GAME_TYPE': 'dummy'
     })
     
     if config:

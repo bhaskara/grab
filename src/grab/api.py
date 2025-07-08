@@ -267,6 +267,16 @@ def start_game(game_id):
     game_meta['status'] = 'active'
     game_meta['started_at'] = datetime.now(timezone.utc).isoformat() + 'Z'
     
+    # Create game object based on game type
+    game_type = current_app.config.get('GAME_TYPE', 'dummy')
+    if game_type == 'dummy':
+        from .dummy_grab import DummyGrab
+        game_object = DummyGrab(list(players))
+        # Store the game object in the game server
+        game_server.games[game_id] = game_object
+    else:
+        return jsonify({'success': False, 'error': f'Unsupported game type: {game_type}'}), 400
+    
     # Update game server state
     try:
         game_server.set_game_state(game_id, 'running')
