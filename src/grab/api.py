@@ -7,7 +7,7 @@ game management, and player-game associations as specified in doc/server-api.md.
 
 import jwt
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from flask import Blueprint, request, jsonify, current_app
 from .game_server import GameServer
@@ -28,7 +28,7 @@ def create_session_token(player_id, username):
     payload = {
         'player_id': player_id,
         'username': username,
-        'exp': datetime.utcnow() + timedelta(hours=24)
+        'exp': datetime.now(timezone.utc) + timedelta(hours=24)
     }
     return jwt.encode(payload, current_app.config['SECRET_KEY'], algorithm='HS256')
 
@@ -85,7 +85,7 @@ def login():
     active_sessions[session_token] = {
         'player_id': player_id,
         'username': username,
-        'created_at': datetime.utcnow().isoformat() + 'Z'
+        'created_at': datetime.now(timezone.utc).isoformat() + 'Z'
     }
     
     # Add player to game server
@@ -130,7 +130,7 @@ def create_game():
         'status': 'waiting',
         'max_players': max_players,
         'time_limit_seconds': time_limit_seconds,
-        'created_at': datetime.utcnow().isoformat() + 'Z',
+        'created_at': datetime.now(timezone.utc).isoformat() + 'Z',
         'started_at': None,
         'finished_at': None
     }
@@ -218,7 +218,7 @@ def start_game(game_id):
     
     # Start the game
     game_meta['status'] = 'active'
-    game_meta['started_at'] = datetime.utcnow().isoformat() + 'Z'
+    game_meta['started_at'] = datetime.now(timezone.utc).isoformat() + 'Z'
     
     # Update game server state
     try:
@@ -250,7 +250,7 @@ def stop_game(game_id):
     
     # Stop the game
     game_meta['status'] = 'finished'
-    game_meta['finished_at'] = datetime.utcnow().isoformat() + 'Z'
+    game_meta['finished_at'] = datetime.now(timezone.utc).isoformat() + 'Z'
     
     # Update game server state
     try:
@@ -317,7 +317,7 @@ def join_game(game_id):
         else:
             return jsonify({'success': False, 'error': str(e)}), 400
     
-    joined_at = datetime.utcnow().isoformat() + 'Z'
+    joined_at = datetime.now(timezone.utc).isoformat() + 'Z'
     
     return jsonify({
         'success': True,
@@ -349,7 +349,7 @@ def leave_game(game_id):
     # This would need to be implemented for full functionality
     # For now, we'll just return success but the player won't actually be removed from the game server
     
-    left_at = datetime.utcnow().isoformat() + 'Z'
+    left_at = datetime.now(timezone.utc).isoformat() + 'Z'
     
     return jsonify({
         'success': True,
