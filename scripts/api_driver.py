@@ -32,7 +32,6 @@ class GrabAPIClient:
         self.session_token: Optional[str] = None
         self.player_id: Optional[str] = None
         self.username: Optional[str] = None
-        self.active_games: Dict[str, Dict[str, Any]] = {}
     
     def login(self, username: str) -> bool:
         """Login with username and store session token."""
@@ -76,7 +75,6 @@ class GrabAPIClient:
             
             if response.status_code == 201 and result.get('success'):
                 game_id = result['data']['game_id']
-                self.active_games[game_id] = result['data']
                 print(f"✓ Game created successfully! Game ID: {game_id}")
                 return game_id
             else:
@@ -152,6 +150,26 @@ class GrabAPIClient:
             print("✗ Invalid JSON response from server")
             return False
     
+    def get_all_games(self) -> Optional[Dict[str, Any]]:
+        """Get information about all games on the server."""
+        url = f"{self.server_url}/api/games"
+        
+        try:
+            response = requests.get(url, headers=self._get_auth_headers())
+            result = response.json()
+            
+            if response.status_code == 200 and result.get('success'):
+                return result['data']
+            else:
+                print(f"✗ Failed to get games: {result.get('error', 'Unknown error')}")
+                return None
+        except requests.exceptions.RequestException as e:
+            print(f"✗ Connection error: {e}")
+            return None
+        except json.JSONDecodeError:
+            print("✗ Invalid JSON response from server")
+            return None
+    
     def get_game_info(self, game_id: str) -> Optional[Dict[str, Any]]:
         """Get information about a specific game."""
         url = f"{self.server_url}/api/games/{game_id}"
@@ -173,30 +191,30 @@ class GrabAPIClient:
         print("SERVER STATUS")
         print("="*50)
         
-        if not self.active_games:
-            print("No active games")
+        games_data = self.get_all_games()
+        if not games_data or not games_data['games']:
+            print("No games on server")
+            print("="*50)
             return
         
-        for game_id in list(self.active_games.keys()):
-            game_info = self.get_game_info(game_id)
-            if game_info:
-                print(f"\nGame {game_id}:")
-                print(f"  Status: {game_info['status']}")
-                print(f"  Max Players: {game_info['max_players']}")
-                print(f"  Current Players: {len(game_info['current_players'])}")
-                if game_info['current_players']:
-                    for player in game_info['current_players']:
-                        print(f"    - {player['username']} (joined: {player['joined_at']})")
-                else:
-                    print("    - No players")
-                print(f"  Created: {game_info['created_at']}")
-                if game_info['started_at']:
-                    print(f"  Started: {game_info['started_at']}")
-                if game_info['finished_at']:
-                    print(f"  Finished: {game_info['finished_at']}")
+        for game_info in games_data['games']:
+            game_id = game_info['game_id']
+            print(f"\nGame {game_id}:")
+            print(f"  Status: {game_info['status']}")
+            print(f"  Max Players: {game_info['max_players']}")
+            print(f"  Current Players: {len(game_info['current_players'])}")
+            if game_info['current_players']:
+                for player in game_info['current_players']:
+                    print(f"    - {player['username']} (joined: {player['joined_at']})")
             else:
-                print(f"\nGame {game_id}: (Unable to fetch info)")
+                print("    - No players")
+            print(f"  Created: {game_info['created_at']}")
+            if game_info['started_at']:
+                print(f"  Started: {game_info['started_at']}")
+            if game_info['finished_at']:
+                print(f"  Finished: {game_info['finished_at']}")
         
+        print(f"\nTotal games: {games_data['total_games']}")
         print("="*50)
 
 
@@ -260,7 +278,6 @@ def main():
                 continue
             game_id = parts[1]
             if client.join_game(game_id):
-                client.active_games[game_id] = {}  # Track this game
                 client.display_server_status()
         elif cmd == "leave":
             if len(parts) != 2:
@@ -268,7 +285,6 @@ def main():
                 continue
             game_id = parts[1]
             if client.leave_game(game_id):
-                client.active_games.pop(game_id, None)  # Stop tracking this game
                 client.display_server_status()
         else:
             print("Unknown command. Available commands: start, start_game <game_id>, join <game_id>, leave <game_id>, exit")
