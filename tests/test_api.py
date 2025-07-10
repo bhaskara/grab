@@ -27,15 +27,12 @@ def client(app):
     # Create shared instances for testing
     game_server_instance = GameServer()
     active_sessions_instance = {}
-    games_metadata_instance = {}
     
     with patch('src.grab.api.game_server', game_server_instance):
         with patch('src.grab.api.active_sessions', active_sessions_instance):
-            with patch('src.grab.api.games_metadata', games_metadata_instance):
-                with patch('src.grab.websocket_handlers.game_server', game_server_instance):
-                    with patch('src.grab.websocket_handlers.active_sessions', active_sessions_instance):
-                        with patch('src.grab.websocket_handlers.games_metadata', games_metadata_instance):
-                            yield app.test_client()
+            with patch('src.grab.websocket_handlers.game_server', game_server_instance):
+                with patch('src.grab.websocket_handlers.active_sessions', active_sessions_instance):
+                    yield app.test_client()
 
 @pytest.fixture
 def auth_headers(client):

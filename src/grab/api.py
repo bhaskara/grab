@@ -20,8 +20,6 @@ game_server = GameServer()
 # Active sessions: session_token -> player_data
 active_sessions = {}
 
-# Enhanced game metadata: game_id -> metadata
-games_metadata = {}
 
 def create_session_token(player_id, username):
     """Create a JWT session token for a player."""
@@ -120,30 +118,24 @@ def create_game():
     if not isinstance(time_limit_seconds, int) or time_limit_seconds < 30:
         return jsonify({'success': False, 'error': 'Invalid time_limit_seconds (must be >= 30)'}), 400
     
-    # Create game in game server
-    game_id = game_server.add_game()
+    # Create game in game server with metadata
+    game_id = game_server.add_game(
+        creator_id=request.current_user['player_id'],
+        creator_username=request.current_user['username'],
+        max_players=max_players,
+        time_limit_seconds=time_limit_seconds
+    )
     
-    # Store game metadata
-    games_metadata[game_id] = {
-        'creator_id': request.current_user['player_id'],
-        'creator_username': request.current_user['username'],
-        'status': 'waiting',
-        'max_players': max_players,
-        'time_limit_seconds': time_limit_seconds,
-        'created_at': datetime.now(timezone.utc).isoformat() + 'Z',
-        'started_at': None,
-        'finished_at': None
-    }
-    
+    game_data = game_server.get_game_metadata(game_id)
     return jsonify({
         'success': True,
         'data': {
             'game_id': game_id,
-            'creator_id': request.current_user['player_id'],
-            'status': 'waiting',
-            'max_players': max_players,
-            'time_limit_seconds': time_limit_seconds,
-            'created_at': games_metadata[game_id]['created_at']
+            'creator_id': game_data['creator_id'],
+            'status': game_data['status'],
+            'max_players': game_data['max_players'],
+            'time_limit_seconds': game_data['time_limit_seconds'],
+            'created_at': game_data['created_at']
         }
     }), 201
 
@@ -153,38 +145,43 @@ def get_all_games():
     """Get information about all games on the server."""
     games_list = []
     
-    for game_id, game_meta in games_metadata.items():
-        # Get current players from game server
+    for game_id in game_server.list_games():
         try:
-            state, players = game_server.get_game_info(game_id)
-            current_players = []
-            for username in players:
-                # Find player_id for this username
-                player_id = None
-                for session_data in active_sessions.values():
-                    if session_data['username'] == username:
-                        player_id = session_data['player_id']
-                        break
-                
-                if player_id:
-                    current_players.append({
-                        'player_id': player_id,
-                        'username': username,
-                        'joined_at': game_meta['created_at']  # Simplified for now
-                    })
+            game_data = game_server.get_game_metadata(game_id)
+            # Get current players from game server
+            try:
+                state, players = game_server.get_game_info(game_id)
+                current_players = []
+                for username in players:
+                    # Find player_id for this username
+                    player_id = None
+                    for session_data in active_sessions.values():
+                        if session_data['username'] == username:
+                            player_id = session_data['player_id']
+                            break
+                    
+                    if player_id:
+                        current_players.append({
+                            'player_id': player_id,
+                            'username': username,
+                            'joined_at': game_data['created_at']  # Simplified for now
+                        })
+            except KeyError:
+                current_players = []
+            
+            games_list.append({
+                'game_id': game_id,
+                'status': game_data['status'],
+                'max_players': game_data['max_players'],
+                'current_players': current_players,
+                'creator_id': game_data['creator_id'],
+                'created_at': game_data['created_at'],
+                'started_at': game_data['started_at'],
+                'finished_at': game_data['finished_at']
+            })
         except KeyError:
-            current_players = []
-        
-        games_list.append({
-            'game_id': game_id,
-            'status': game_meta['status'],
-            'max_players': game_meta['max_players'],
-            'current_players': current_players,
-            'creator_id': game_meta['creator_id'],
-            'created_at': game_meta['created_at'],
-            'started_at': game_meta['started_at'],
-            'finished_at': game_meta['finished_at']
-        })
+            # Skip games that don't have metadata (shouldn't happen)
+            continue
     
     return jsonify({
         'success': True,
@@ -198,10 +195,10 @@ def get_all_games():
 @require_auth
 def get_game(game_id):
     """Get information about a specific game."""
-    if game_id not in games_metadata:
+    try:
+        game_data = game_server.get_game_metadata(game_id)
+    except KeyError:
         return jsonify({'success': False, 'error': 'Game not found'}), 404
-    
-    game_meta = games_metadata[game_id]
     
     # Get current players from game server
     try:
@@ -219,7 +216,7 @@ def get_game(game_id):
                 current_players.append({
                     'player_id': player_id,
                     'username': username,
-                    'joined_at': game_meta['created_at']  # Simplified for now
+                    'joined_at': game_data['created_at']  # Simplified for now
                 })
     except KeyError:
         current_players = []
@@ -228,13 +225,13 @@ def get_game(game_id):
         'success': True,
         'data': {
             'game_id': game_id,
-            'status': game_meta['status'],
-            'max_players': game_meta['max_players'],
+            'status': game_data['status'],
+            'max_players': game_data['max_players'],
             'current_players': current_players,
-            'creator_id': game_meta['creator_id'],
-            'created_at': game_meta['created_at'],
-            'started_at': game_meta['started_at'],
-            'finished_at': game_meta['finished_at']
+            'creator_id': game_data['creator_id'],
+            'created_at': game_data['created_at'],
+            'started_at': game_data['started_at'],
+            'finished_at': game_data['finished_at']
         }
     }), 200
 
@@ -242,17 +239,17 @@ def get_game(game_id):
 @require_auth
 def start_game(game_id):
     """Start a game that is waiting for players."""
-    if game_id not in games_metadata:
+    try:
+        game_data = game_server.get_game_metadata(game_id)
+    except KeyError:
         return jsonify({'success': False, 'error': 'Game not found'}), 404
     
-    game_meta = games_metadata[game_id]
-    
     # Check if current user is the creator
-    if game_meta['creator_id'] != request.current_user['player_id']:
+    if game_data['creator_id'] != request.current_user['player_id']:
         return jsonify({'success': False, 'error': 'Only the game creator can start the game'}), 403
     
     # Check if game can be started
-    if game_meta['status'] != 'waiting':
+    if game_data['status'] != 'waiting':
         return jsonify({'success': False, 'error': 'Game cannot be started (wrong status)'}), 400
     
     # Get current players from game server
@@ -264,8 +261,7 @@ def start_game(game_id):
         return jsonify({'success': False, 'error': 'Game cannot be started (game not found)'}), 400
     
     # Start the game
-    game_meta['status'] = 'active'
-    game_meta['started_at'] = datetime.now(timezone.utc).isoformat() + 'Z'
+    game_server.start_game(game_id)
     
     # Create game object based on game type
     game_type = current_app.config.get('GAME_TYPE', 'dummy')
@@ -277,17 +273,27 @@ def start_game(game_id):
         game_server.games[game_id] = {
             'state': 'running',
             'players': original_game_data['players'],
-            'game_object': game_object
+            'game_object': game_object,
+            # Keep all metadata
+            'creator_id': original_game_data['creator_id'],
+            'creator_username': original_game_data['creator_username'],
+            'status': original_game_data['status'],
+            'max_players': original_game_data['max_players'],
+            'time_limit_seconds': original_game_data['time_limit_seconds'],
+            'created_at': original_game_data['created_at'],
+            'started_at': original_game_data['started_at'],
+            'finished_at': original_game_data['finished_at']
         }
     else:
         return jsonify({'success': False, 'error': f'Unsupported game type: {game_type}'}), 400
     
+    updated_game_data = game_server.get_game_metadata(game_id)
     return jsonify({
         'success': True,
         'data': {
             'game_id': game_id,
             'status': 'active',
-            'started_at': game_meta['started_at']
+            'started_at': updated_game_data['started_at']
         }
     }), 200
 
@@ -295,18 +301,17 @@ def start_game(game_id):
 @require_auth
 def stop_game(game_id):
     """Stop/cancel a game."""
-    if game_id not in games_metadata:
+    try:
+        game_data = game_server.get_game_metadata(game_id)
+    except KeyError:
         return jsonify({'success': False, 'error': 'Game not found'}), 404
     
-    game_meta = games_metadata[game_id]
-    
     # Check if current user is the creator
-    if game_meta['creator_id'] != request.current_user['player_id']:
+    if game_data['creator_id'] != request.current_user['player_id']:
         return jsonify({'success': False, 'error': 'Only the game creator can stop the game'}), 403
     
     # Stop the game
-    game_meta['status'] = 'finished'
-    game_meta['finished_at'] = datetime.now(timezone.utc).isoformat() + 'Z'
+    game_server.finish_game(game_id)
     
     # Update game server state
     try:
@@ -314,12 +319,13 @@ def stop_game(game_id):
     except (KeyError, ValueError):
         pass  # Game server state management
     
+    updated_game_data = game_server.get_game_metadata(game_id)
     return jsonify({
         'success': True,
         'data': {
             'game_id': game_id,
             'status': 'finished',
-            'finished_at': game_meta['finished_at']
+            'finished_at': updated_game_data['finished_at']
         }
     }), 200
 
@@ -327,14 +333,15 @@ def stop_game(game_id):
 @require_auth
 def join_game(game_id):
     """Add the authenticated player to a game."""
-    if game_id not in games_metadata:
+    try:
+        game_data = game_server.get_game_metadata(game_id)
+    except KeyError:
         return jsonify({'success': False, 'error': 'Game not found'}), 404
     
-    game_meta = games_metadata[game_id]
     username = request.current_user['username']
     
     # Check if game has already started
-    if game_meta['status'] != 'waiting':
+    if game_data['status'] != 'waiting':
         return jsonify({'success': False, 'error': 'Game has already started'}), 400
     
     # Get current players from game server
@@ -342,7 +349,7 @@ def join_game(game_id):
         state, players = game_server.get_game_info(game_id)
         
         # Check if game is full
-        if len(players) >= game_meta['max_players']:
+        if len(players) >= game_data['max_players']:
             return jsonify({'success': False, 'error': 'Game is full'}), 400
         
         # Check if player is already in this game
@@ -353,14 +360,18 @@ def join_game(game_id):
     
     # Check if player is in another active game by checking game server directly
     for other_game_id in game_server.list_games():
-        if other_game_id != game_id and other_game_id in games_metadata:
-            if games_metadata[other_game_id]['status'] in ['waiting', 'active']:
-                try:
-                    other_state, other_players = game_server.get_game_info(other_game_id)
-                    if username in other_players:
-                        return jsonify({'success': False, 'error': 'Player is already in another active game'}), 409
-                except KeyError:
-                    pass
+        if other_game_id != game_id:
+            try:
+                other_game_data = game_server.get_game_metadata(other_game_id)
+                if other_game_data['status'] in ['waiting', 'active']:
+                    try:
+                        other_state, other_players = game_server.get_game_info(other_game_id)
+                        if username in other_players:
+                            return jsonify({'success': False, 'error': 'Player is already in another active game'}), 409
+                    except KeyError:
+                        pass
+            except KeyError:
+                pass
     
     # Add player to game server
     try:
@@ -389,10 +400,11 @@ def join_game(game_id):
 @require_auth
 def connect_websocket(game_id):
     """Establish WebSocket connection for real-time game communication."""
-    if game_id not in games_metadata:
+    try:
+        game_data = game_server.get_game_metadata(game_id)
+    except KeyError:
         return jsonify({'success': False, 'error': 'Game not found'}), 404
     
-    game_meta = games_metadata[game_id]
     username = request.current_user['username']
     
     # Check if player is in this game
@@ -404,7 +416,7 @@ def connect_websocket(game_id):
         return jsonify({'success': False, 'error': 'Game not found'}), 404
     
     # Check if game is active
-    if game_meta['status'] != 'active':
+    if game_data['status'] != 'active':
         return jsonify({'success': False, 'error': 'Game is not active'}), 400
     
     # For WebSocket connections, the client should connect to Socket.IO endpoint

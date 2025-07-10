@@ -50,18 +50,28 @@ class GameServer(object):
         game = self.games[game_id]
         return game['state'], game['players'].copy()
 
-    def add_game(self) -> str:
+    def add_game(self, creator_id=None, creator_username=None, max_players=4, time_limit_seconds=300) -> str:
         """Add a new game and return its ID.
 
         For now, IDs are consecutively increasing integers (converted to str).
 
         """
+        from datetime import datetime, timezone
+        
         game_id = str(self.next_game_id)
         self.next_game_id += 1
         
         self.games[game_id] = {
             'state': 'setup',
-            'players': []
+            'players': [],
+            'creator_id': creator_id,
+            'creator_username': creator_username,
+            'status': 'waiting',
+            'max_players': max_players,
+            'time_limit_seconds': time_limit_seconds,
+            'created_at': datetime.now(timezone.utc).isoformat() + 'Z',
+            'started_at': None,
+            'finished_at': None
         }
         
         return game_id
@@ -121,3 +131,37 @@ class GameServer(object):
             raise ValueError(f"Invalid state '{state}'. Must be one of: {valid_states}")
         
         self.games[game_id]['state'] = state
+
+    def update_game_status(self, game_id: str, status: str):
+        """Update the API status of a game (waiting, active, finished)."""
+        if game_id not in self.games:
+            raise KeyError(f"Game '{game_id}' does not exist")
+        
+        self.games[game_id]['status'] = status
+
+    def start_game(self, game_id: str):
+        """Start a game by updating its status and timestamps."""
+        from datetime import datetime, timezone
+        
+        if game_id not in self.games:
+            raise KeyError(f"Game '{game_id}' does not exist")
+        
+        self.games[game_id]['status'] = 'active'
+        self.games[game_id]['started_at'] = datetime.now(timezone.utc).isoformat() + 'Z'
+
+    def finish_game(self, game_id: str):
+        """Finish a game by updating its status and timestamps."""
+        from datetime import datetime, timezone
+        
+        if game_id not in self.games:
+            raise KeyError(f"Game '{game_id}' does not exist")
+        
+        self.games[game_id]['status'] = 'finished'
+        self.games[game_id]['finished_at'] = datetime.now(timezone.utc).isoformat() + 'Z'
+
+    def get_game_metadata(self, game_id: str):
+        """Get all metadata for a game."""
+        if game_id not in self.games:
+            raise KeyError(f"Game '{game_id}' does not exist")
+        
+        return self.games[game_id].copy()

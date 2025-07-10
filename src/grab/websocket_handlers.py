@@ -9,7 +9,7 @@ import json
 import jwt
 from flask import request, current_app
 from flask_socketio import emit, join_room, leave_room, disconnect
-from .api import game_server, games_metadata, active_sessions, verify_session_token
+from .api import game_server, active_sessions, verify_session_token
 
 
 # Connected players: socket_id -> player_data
@@ -91,11 +91,12 @@ def init_socketio_handlers(socketio):
             return
         
         # Validate game exists and player is in it
-        if game_id not in games_metadata:
+        try:
+            game_data = game_server.get_game_metadata(game_id)
+        except KeyError:
             emit('error', {'message': 'Game not found'})
             return
         
-        game_meta = games_metadata[game_id]
         username = player_info['username']
         
         # Check if player is in this game
@@ -109,7 +110,7 @@ def init_socketio_handlers(socketio):
             return
         
         # Check if game is active
-        if game_meta['status'] != 'active':
+        if game_data['status'] != 'active':
             emit('error', {'message': 'Game is not active'})
             return
         
@@ -253,10 +254,10 @@ def init_socketio_handlers(socketio):
 
 def _get_game_state(game_id):
     """Get the current game state for a given game."""
-    if game_id not in games_metadata:
+    try:
+        game_data = game_server.get_game_metadata(game_id)
+    except KeyError:
         raise ValueError(f"Game {game_id} not found")
-    
-    game_meta = games_metadata[game_id]
     
     # Get players and their connection status
     try:
@@ -295,7 +296,7 @@ def _get_game_state(game_id):
         return {
             'game_id': game_id,
             'game_type': 'dummy',  # TODO: Get from game meta
-            'status': game_meta['status'],
+            'status': game_data['status'],
             'current_turn': 1,  # TODO: Get from game state
             'turn_time_remaining': None,  # TODO: Implement time limits
             'players': players_dict,
