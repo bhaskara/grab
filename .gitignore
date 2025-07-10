@@ -197,3 +197,7 @@ cython_debug/
 
 # Temporary/backup files
 *~
+
+# Emacs temporary files
+.#*
+\#*#

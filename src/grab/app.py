@@ -40,4 +40,8 @@ def create_app(config=None):
     from . import api
     app.register_blueprint(api.api_bp)
     
+    # Initialize WebSocket handlers
+    from . import websocket_handlers
+    websocket_handlers.init_socketio_handlers(socketio)
+    
     return app, socketio

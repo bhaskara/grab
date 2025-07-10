@@ -272,16 +272,15 @@ def start_game(game_id):
     if game_type == 'dummy':
         from .dummy_grab import DummyGrab
         game_object = DummyGrab(list(players))
-        # Store the game object in the game server
-        game_server.games[game_id] = game_object
+        # Store the game object in the game server, but keep the original structure
+        original_game_data = game_server.games[game_id]
+        game_server.games[game_id] = {
+            'state': 'running',
+            'players': original_game_data['players'],
+            'game_object': game_object
+        }
     else:
         return jsonify({'success': False, 'error': f'Unsupported game type: {game_type}'}), 400
-    
-    # Update game server state
-    try:
-        game_server.set_game_state(game_id, 'running')
-    except (KeyError, ValueError):
-        pass  # Game server state management
     
     return jsonify({
         'success': True,
@@ -408,6 +407,13 @@ def connect_websocket(game_id):
     if game_meta['status'] != 'active':
         return jsonify({'success': False, 'error': 'Game is not active'}), 400
     
-    # WebSocket upgrade should be handled by Flask-SocketIO
-    # This endpoint primarily validates the connection request
-    return jsonify({'success': False, 'error': 'WebSocket upgrade failed'}), 400
+    # For WebSocket connections, the client should connect to Socket.IO endpoint
+    # This endpoint validates the connection prerequisites
+    return jsonify({
+        'success': True,
+        'data': {
+            'message': 'Connection validated. Use Socket.IO to connect.',
+            'game_id': game_id,
+            'socketio_namespace': '/'
+        }
+    }), 200
