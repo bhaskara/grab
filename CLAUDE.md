@@ -23,5 +23,9 @@ Currently in prototype phase - not designed for large scale deployment. Focus is
 This project is for learning, so please document things.  It doesn't have to be overly verbose, but brief explanations of things will be helpful:
 - Each directory should have a README.md explaining what's in this directory.
 - Each file should have a comment at the top explaining what it contains.
-- Each class, function, method, and test should have a docstring.
+- Each class, function, method, and test should have a docstring.  For public methods/functions, the docstring should be in Numpy style, with
+  documentation of parameters and return values.
+  
+In general, things should fail early and informatively.  For example, don't silently catch exceptions and return None within library functions.  Instead, pass those exceptions up unless they can be handled (but do document this behavior).
+
 
