@@ -7,6 +7,34 @@ from dataclasses import dataclass
 from typing import List, Set, Optional, Tuple
 import numpy as np
 
+
+class NoWordFoundException(Exception):
+    """Exception raised when construct_move cannot find a valid word combination.
+    
+    Attributes
+    ----------
+    word : str
+        The word that could not be constructed
+    state : State
+        The game state when the attempt was made
+    """
+    
+    def __init__(self, word: str, state: 'State'):
+        """Initialize the exception.
+        
+        Parameters
+        ----------
+        word : str
+            The word that could not be constructed
+        state : State
+            The game state when the attempt was made
+        """
+        self.word = word
+        self.state = state
+        message = f"Cannot construct word '{word}' with available letters and words"
+        super().__init__(message)
+
+
 # Standard Scrabble letter distribution
 STANDARD_SCRABBLE_DISTRIBUTION = np.array([
     9,  # A
@@ -169,6 +197,7 @@ class Word(object):
             self.letter_counts[ord(char) - ord('a')] += 1
 
 
+
 @dataclass
 class Move(object):
     """Represents a single move made by a player forming a new word
@@ -239,4 +268,4 @@ class Move(object):
         else:
             self.pool_letters = pool_letters
 
-    
+
