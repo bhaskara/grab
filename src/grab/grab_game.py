@@ -3,11 +3,38 @@ import os
 import numpy as np
 from .grab_state import State, Word, Move, NoWordFoundException
 
+# Standard Scrabble letter scores (A=1, B=3, C=3, ...)
+SCRABBLE_LETTER_SCORES = np.array([
+    1, 3, 3, 2, 1, 4, 2, 4, 1, 8, 5, 1, 3, 1, 1, 3, 10, 1, 1, 1, 1, 4, 4, 8, 4, 10
+])
+
 
 class Grab(object):
     """This class implements the logic of the grab game.
 
+    Parameters
+    ----------
+    letter_scores : np.ndarray, optional
+        Length-26 array containing per-letter scores (a=0, b=1, ..., z=25).
+        Defaults to standard Scrabble letter scores.
     """
+
+    def __init__(self, letter_scores: np.ndarray = None):
+        """Initialize a Grab game instance.
+        
+        Parameters
+        ----------
+        letter_scores : np.ndarray, optional
+            Length-26 array containing per-letter scores (a=0, b=1, ..., z=25).
+            Defaults to standard Scrabble letter scores.
+        """
+        if letter_scores is None:
+            self.letter_scores = SCRABBLE_LETTER_SCORES.copy()
+        else:
+            if len(letter_scores) != 26:
+                raise ValueError("letter_scores must be a length-26 array")
+            self.letter_scores = np.array(letter_scores)
+
     
     def construct_move(self, state: State, player: int, word: str) -> tuple[Move, State]:
         """Construct a Move that enables a player to make a particular word.
@@ -137,8 +164,8 @@ class Grab(object):
                 new_state.words_per_player[player].append(Word(word))
                 
                 # Update the current player's score (sum of letter values in the new word)
-                # For simplicity, we'll use the letter count as score for now
-                new_state.scores[player] += len(word)
+                word_score = np.dot(target_word.letter_counts, self.letter_scores)
+                new_state.scores[player] += word_score
                 
                 return move, new_state
         
