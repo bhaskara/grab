@@ -1,7 +1,7 @@
 from typing import Set
 import os
 import numpy as np
-from .grab_state import State, Word, Move, NoWordFoundException
+from .grab_state import State, Word, MakeWord, DrawLetters, NoWordFoundException
 
 # Standard Scrabble letter scores (A=1, B=3, C=3, ...)
 SCRABBLE_LETTER_SCORES = np.array([
@@ -36,7 +36,7 @@ class Grab(object):
             self.letter_scores = np.array(letter_scores)
 
     
-    def construct_move(self, state: State, player: int, word: str) -> tuple[Move, State]:
+    def construct_move(self, state: State, player: int, word: str) -> tuple[MakeWord, State]:
         """Construct a Move that enables a player to make a particular word.
 
         Specifically, this figures out which combination of existing player words
@@ -57,7 +57,7 @@ class Grab(object):
 
         Returns
         -------
-        move : Move
+        move : MakeWord
             A legal move corresponding to the creation of the given word by this player
         new_state : State
             The resulting state after making this move
@@ -132,7 +132,7 @@ class Grab(object):
                     for _ in range(remaining_counts[letter_idx]):
                         pool_letters.append(letter_char)
                 
-                move = Move(
+                move = MakeWord(
                     player=player,
                     word=word,
                     other_player_words=other_player_words,
@@ -171,6 +171,68 @@ class Grab(object):
         
         # Step 5: If we get here, the word cannot be made
         raise NoWordFoundException(word, state)
+
+    def construct_draw_letters(self, state: State, num_letters: int = 1) -> tuple[DrawLetters, State]:
+        """Construct a DrawLetters move that draws random letters from the bag to the pool.
+
+        Parameters
+        ----------
+        state : State
+            The current game state
+        num_letters : int, optional
+            Number of letters to draw from the bag. Defaults to 1.
+
+        Returns
+        -------
+        move : DrawLetters
+            A DrawLetters move containing the specific letters drawn
+        new_state : State
+            The resulting state after drawing the letters
+
+        Raises
+        ------
+        ValueError
+            If num_letters is not positive or if there aren't enough letters in the bag
+
+        """
+        if num_letters <= 0:
+            raise ValueError("Number of letters to draw must be positive")
+        
+        # Check if there are enough letters in the bag
+        total_letters_in_bag = np.sum(state.bag)
+        if total_letters_in_bag < num_letters:
+            raise ValueError(f"Not enough letters in bag. Requested {num_letters}, but only {total_letters_in_bag} available")
+        
+        # Create a list of available letters based on bag contents
+        available_letters = []
+        for letter_idx in range(26):
+            letter_char = chr(ord('a') + letter_idx)
+            count = state.bag[letter_idx]
+            available_letters.extend([letter_char] * count)
+        
+        # Randomly select letters from the bag
+        import random
+        drawn_letters = random.sample(available_letters, num_letters)
+        
+        # Create the DrawLetters move
+        move = DrawLetters(drawn_letters)
+        
+        # Construct the new state after applying this move
+        new_state = State(
+            num_players=state.num_players,
+            words_per_player=[words[:] for words in state.words_per_player],  # Deep copy
+            pool=state.pool.copy(),
+            bag=state.bag.copy(),
+            scores=state.scores.copy()
+        )
+        
+        # Remove drawn letters from the bag and add them to the pool
+        for letter in drawn_letters:
+            letter_idx = ord(letter) - ord('a')
+            new_state.bag[letter_idx] -= 1
+            new_state.pool[letter_idx] += 1
+        
+        return move, new_state
 
 
 

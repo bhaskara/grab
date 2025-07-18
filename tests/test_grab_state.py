@@ -4,7 +4,7 @@ Unit tests for grab_state module
 
 import unittest
 import numpy as np
-from src.grab.grab_state import Word, State, Move, STANDARD_SCRABBLE_DISTRIBUTION
+from src.grab.grab_state import Word, State, MakeWord, DrawLetters, STANDARD_SCRABBLE_DISTRIBUTION
 
 
 class TestWord(unittest.TestCase):
@@ -260,12 +260,12 @@ class TestState(unittest.TestCase):
             self.assertEqual(state.scores[i], 0)
 
 
-class TestMove(unittest.TestCase):
-    """Test cases for the Move class"""
+class TestMakeWord(unittest.TestCase):
+    """Test cases for the MakeWord class"""
 
     def test_move_creation_minimal(self):
-        """Test creating a Move with minimal parameters"""
-        move = Move(player=0, word="cat")
+        """Test creating a MakeWord with minimal parameters"""
+        move = MakeWord(player=0, word="cat")
         
         self.assertEqual(move.player, 0)
         self.assertEqual(move.word, "cat")
@@ -273,11 +273,11 @@ class TestMove(unittest.TestCase):
         self.assertEqual(move.pool_letters, [])
 
     def test_move_creation_with_all_parameters(self):
-        """Test creating a Move with all parameters"""
+        """Test creating a MakeWord with all parameters"""
         other_words = [(1, "dog"), (2, "bird")]
         pool_letters = ["a", "t"]
         
-        move = Move(
+        move = MakeWord(
             player=0,
             word="cats",
             other_player_words=other_words,
@@ -291,41 +291,41 @@ class TestMove(unittest.TestCase):
 
     def test_move_word_case_conversion(self):
         """Test that word is converted to lowercase"""
-        move = Move(player=1, word="HELLO")
+        move = MakeWord(player=1, word="HELLO")
         self.assertEqual(move.word, "hello")
         
-        move = Move(player=1, word="MiXeD")
+        move = MakeWord(player=1, word="MiXeD")
         self.assertEqual(move.word, "mixed")
 
     def test_move_creation_invalid_player_negative(self):
-        """Test creating a Move with negative player raises ValueError"""
+        """Test creating a MakeWord with negative player raises ValueError"""
         with self.assertRaises(ValueError) as context:
-            Move(player=-1, word="cat")
+            MakeWord(player=-1, word="cat")
         self.assertIn("Player must be non-negative", str(context.exception))
 
     def test_move_creation_invalid_word_characters(self):
-        """Test creating a Move with invalid word characters raises ValueError"""
+        """Test creating a MakeWord with invalid word characters raises ValueError"""
         with self.assertRaises(ValueError) as context:
-            Move(player=0, word="cat1")
+            MakeWord(player=0, word="cat1")
         self.assertIn("invalid character: '1'", str(context.exception))
         
         with self.assertRaises(ValueError) as context:
-            Move(player=0, word="hello world")
+            MakeWord(player=0, word="hello world")
         self.assertIn("invalid character: ' '", str(context.exception))
         
         with self.assertRaises(ValueError) as context:
-            Move(player=0, word="cat!")
+            MakeWord(player=0, word="cat!")
         self.assertIn("invalid character: '!'", str(context.exception))
 
     def test_move_creation_empty_word(self):
-        """Test creating a Move with empty word is allowed"""
-        move = Move(player=0, word="")
+        """Test creating a MakeWord with empty word is allowed"""
+        move = MakeWord(player=0, word="")
         self.assertEqual(move.word, "")
 
     def test_move_with_other_player_words(self):
-        """Test creating a Move with words from other players"""
+        """Test creating a MakeWord with words from other players"""
         other_words = [(1, "dog"), (2, "fish"), (0, "cat")]
-        move = Move(player=3, word="animals", other_player_words=other_words)
+        move = MakeWord(player=3, word="animals", other_player_words=other_words)
         
         self.assertEqual(move.player, 3)
         self.assertEqual(move.word, "animals")
@@ -333,9 +333,9 @@ class TestMove(unittest.TestCase):
         self.assertEqual(move.pool_letters, [])
 
     def test_move_with_pool_letters(self):
-        """Test creating a Move with letters from pool"""
+        """Test creating a MakeWord with letters from pool"""
         pool_letters = ["a", "b", "c", "x", "y", "z"]
-        move = Move(player=1, word="cabxyz", pool_letters=pool_letters)
+        move = MakeWord(player=1, word="cabxyz", pool_letters=pool_letters)
         
         self.assertEqual(move.player, 1)
         self.assertEqual(move.word, "cabxyz")
@@ -343,8 +343,8 @@ class TestMove(unittest.TestCase):
         self.assertEqual(move.pool_letters, ["a", "b", "c", "x", "y", "z"])
 
     def test_move_with_empty_lists(self):
-        """Test creating a Move with explicitly empty lists"""
-        move = Move(player=2, word="test", other_player_words=[], pool_letters=[])
+        """Test creating a MakeWord with explicitly empty lists"""
+        move = MakeWord(player=2, word="test", other_player_words=[], pool_letters=[])
         
         self.assertEqual(move.player, 2)
         self.assertEqual(move.word, "test")
@@ -356,7 +356,7 @@ class TestMove(unittest.TestCase):
         other_words = [(0, "cat"), (1, "dog"), (2, "fish")]
         pool_letters = ["s", "e", "t"]
         
-        move = Move(
+        move = MakeWord(
             player=3,
             word="catsdogsfishset",
             other_player_words=other_words,
@@ -370,38 +370,87 @@ class TestMove(unittest.TestCase):
 
     def test_move_player_zero(self):
         """Test that player 0 is valid"""
-        move = Move(player=0, word="valid")
+        move = MakeWord(player=0, word="valid")
         self.assertEqual(move.player, 0)
 
     def test_move_large_player_number(self):
         """Test that large player numbers are valid"""
-        move = Move(player=999, word="valid")
+        move = MakeWord(player=999, word="valid")
         self.assertEqual(move.player, 999)
 
     def test_move_with_single_letter_word(self):
-        """Test creating a Move with single letter word"""
-        move = Move(player=1, word="a")
+        """Test creating a MakeWord with single letter word"""
+        move = MakeWord(player=1, word="a")
         self.assertEqual(move.word, "a")
 
     def test_move_with_long_word(self):
-        """Test creating a Move with very long word"""
+        """Test creating a MakeWord with very long word"""
         long_word = "supercalifragilisticexpialidocious"
-        move = Move(player=0, word=long_word)
+        move = MakeWord(player=0, word=long_word)
         self.assertEqual(move.word, long_word)
 
     def test_move_other_player_words_types(self):
         """Test that other_player_words accepts various valid formats"""
         # Test with different player IDs and word types
         other_words = [(0, "a"), (999, "verylongword"), (1, "")]
-        move = Move(player=5, word="test", other_player_words=other_words)
+        move = MakeWord(player=5, word="test", other_player_words=other_words)
         self.assertEqual(move.other_player_words, [(0, "a"), (999, "verylongword"), (1, "")])
 
     def test_move_pool_letters_types(self):
         """Test that pool_letters accepts various valid formats"""
         # Test with different letter combinations
         pool_letters = ["a", "z", "m", "q", "x"]
-        move = Move(player=0, word="test", pool_letters=pool_letters)
+        move = MakeWord(player=0, word="test", pool_letters=pool_letters)
         self.assertEqual(move.pool_letters, ["a", "z", "m", "q", "x"])
+
+
+class TestDrawLetters(unittest.TestCase):
+    """Test cases for the DrawLetters class"""
+
+    def test_draw_letters_creation_single_letter(self):
+        """Test creating a DrawLetters with single letter"""
+        move = DrawLetters(["a"])
+        self.assertEqual(move.letters, ["a"])
+
+    def test_draw_letters_creation_multiple_letters(self):
+        """Test creating a DrawLetters with multiple letters"""
+        move = DrawLetters(["a", "b", "c"])
+        self.assertEqual(move.letters, ["a", "b", "c"])
+
+    def test_draw_letters_creation_empty_list(self):
+        """Test creating a DrawLetters with empty list"""
+        move = DrawLetters([])
+        self.assertEqual(move.letters, [])
+
+    def test_draw_letters_case_conversion(self):
+        """Test that DrawLetters converts letters to lowercase"""
+        move = DrawLetters(["A", "B", "C"])
+        self.assertEqual(move.letters, ["a", "b", "c"])
+
+    def test_draw_letters_invalid_characters(self):
+        """Test creating a DrawLetters with invalid characters raises ValueError"""
+        with self.assertRaises(ValueError):
+            DrawLetters(["1"])  # Number
+        
+        with self.assertRaises(ValueError):
+            DrawLetters(["ab"])  # Multiple characters
+        
+        with self.assertRaises(ValueError):
+            DrawLetters(["!"])  # Special character
+        
+        with self.assertRaises(ValueError):
+            DrawLetters([" "])  # Space
+
+    def test_draw_letters_mixed_case(self):
+        """Test DrawLetters with mixed case letters"""
+        move = DrawLetters(["A", "z", "M"])
+        self.assertEqual(move.letters, ["a", "z", "m"])
+
+    def test_draw_letters_all_alphabet(self):
+        """Test DrawLetters with all alphabet letters"""
+        letters = [chr(ord('a') + i) for i in range(26)]
+        move = DrawLetters(letters)
+        self.assertEqual(move.letters, letters)
 
 
 if __name__ == '__main__':

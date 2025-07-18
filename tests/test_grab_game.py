@@ -5,7 +5,7 @@ Unit tests for Grab game logic and scoring
 import unittest
 import numpy as np
 from src.grab.grab_game import Grab, SCRABBLE_LETTER_SCORES
-from src.grab.grab_state import State, Word, Move, NoWordFoundException
+from src.grab.grab_state import State, Word, MakeWord, DrawLetters, NoWordFoundException
 
 
 class TestGrab(unittest.TestCase):
@@ -129,6 +129,147 @@ class TestGrab(unittest.TestCase):
         self.assertEqual(SCRABBLE_LETTER_SCORES[16], 10) # Q = 10
         self.assertEqual(SCRABBLE_LETTER_SCORES[25], 10) # Z = 10
         self.assertEqual(SCRABBLE_LETTER_SCORES[9], 8)   # J = 8
+
+    def test_construct_draw_letters_single_letter(self):
+        """Test drawing a single letter from the bag"""
+        game = Grab()
+        
+        # Create a state with specific letters in the bag
+        state = State(
+            num_players=2,
+            words_per_player=[[], []],
+            pool=np.zeros(26),
+            bag=np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]),  # a, c, t
+            scores=np.array([0, 0])
+        )
+        
+        # Draw one letter
+        move, new_state = game.construct_draw_letters(state, 1)
+        
+        # Verify the move contains exactly one letter
+        self.assertIsInstance(move, DrawLetters)
+        self.assertEqual(len(move.letters), 1)
+        self.assertIn(move.letters[0], ['a', 'c', 't'])
+        
+        # Verify the state changes correctly
+        self.assertEqual(np.sum(new_state.bag), 2)  # One less letter in bag
+        self.assertEqual(np.sum(new_state.pool), 1)  # One more letter in pool
+        
+        # Verify the drawn letter was moved from bag to pool
+        drawn_letter = move.letters[0]
+        letter_idx = ord(drawn_letter) - ord('a')
+        self.assertEqual(new_state.bag[letter_idx], state.bag[letter_idx] - 1)
+        self.assertEqual(new_state.pool[letter_idx], state.pool[letter_idx] + 1)
+
+    def test_construct_draw_letters_multiple_letters(self):
+        """Test drawing multiple letters from the bag"""
+        game = Grab()
+        
+        # Create a state with more letters in the bag
+        state = State(
+            num_players=1,
+            words_per_player=[[]],
+            pool=np.zeros(26),
+            bag=np.array([3, 2, 2, 1, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0]),  # 14 total letters
+            scores=np.array([0])
+        )
+        
+        # Draw three letters
+        move, new_state = game.construct_draw_letters(state, 3)
+        
+        # Verify the move contains exactly three letters
+        self.assertIsInstance(move, DrawLetters)
+        self.assertEqual(len(move.letters), 3)
+        
+        # Verify the state changes correctly
+        self.assertEqual(np.sum(new_state.bag), 11)  # Three less letters in bag
+        self.assertEqual(np.sum(new_state.pool), 3)  # Three more letters in pool
+
+    def test_construct_draw_letters_empty_bag(self):
+        """Test that drawing from an empty bag raises ValueError"""
+        game = Grab()
+        
+        # Create a state with empty bag
+        state = State(
+            num_players=1,
+            words_per_player=[[]],
+            pool=np.zeros(26),
+            bag=np.zeros(26),  # Empty bag
+            scores=np.array([0])
+        )
+        
+        # Attempt to draw a letter should raise ValueError
+        with self.assertRaises(ValueError) as context:
+            game.construct_draw_letters(state, 1)
+        
+        self.assertIn("Not enough letters in bag", str(context.exception))
+
+    def test_construct_draw_letters_insufficient_letters(self):
+        """Test drawing more letters than available raises ValueError"""
+        game = Grab()
+        
+        # Create a state with only 2 letters in bag
+        state = State(
+            num_players=1,
+            words_per_player=[[]],
+            pool=np.zeros(26),
+            bag=np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),  # a, c
+            scores=np.array([0])
+        )
+        
+        # Attempt to draw 3 letters should raise ValueError
+        with self.assertRaises(ValueError) as context:
+            game.construct_draw_letters(state, 3)
+        
+        self.assertIn("Not enough letters in bag", str(context.exception))
+
+    def test_construct_draw_letters_invalid_num_letters(self):
+        """Test that requesting zero or negative letters raises ValueError"""
+        game = Grab()
+        
+        state = State(
+            num_players=1,
+            words_per_player=[[]],
+            pool=np.zeros(26),
+            bag=np.array([5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),  # 5 a's
+            scores=np.array([0])
+        )
+        
+        # Test zero letters
+        with self.assertRaises(ValueError) as context:
+            game.construct_draw_letters(state, 0)
+        self.assertIn("must be positive", str(context.exception))
+        
+        # Test negative letters
+        with self.assertRaises(ValueError) as context:
+            game.construct_draw_letters(state, -1)
+        self.assertIn("must be positive", str(context.exception))
+
+    def test_construct_draw_letters_state_immutability(self):
+        """Test that the original state is not modified"""
+        game = Grab()
+        
+        original_bag = np.array([2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+        original_pool = np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+        
+        state = State(
+            num_players=1,
+            words_per_player=[[]],
+            pool=original_pool.copy(),
+            bag=original_bag.copy(),
+            scores=np.array([0])
+        )
+        
+        # Draw a letter
+        move, new_state = game.construct_draw_letters(state, 1)
+        
+        # Verify original state is unchanged
+        np.testing.assert_array_equal(state.bag, original_bag)
+        np.testing.assert_array_equal(state.pool, original_pool)
+        
+        # Verify new state is different
+        self.assertFalse(np.array_equal(new_state.bag, original_bag))
+        self.assertFalse(np.array_equal(new_state.pool, original_pool))
 
 
 if __name__ == '__main__':

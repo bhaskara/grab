@@ -200,7 +200,20 @@ class Word(object):
 
 @dataclass
 class Move(object):
-    """Represents a single move made by a player forming a new word
+    """Base class for all types of moves in the Grab game.
+    
+    This is an abstract base class for different types of moves that can occur
+    in the game, such as making words or drawing letters.
+    """
+    
+    def __init__(self):
+        """Initialize a new move."""
+        pass
+
+
+@dataclass
+class MakeWord(Move):
+    """Represents a move where a player forms a new word.
 
     Attributes
     ----------
@@ -223,7 +236,7 @@ class Move(object):
     def __init__(self, player: int, word: str, 
                  other_player_words: Optional[List[Tuple[int, str]]] = None,
                  pool_letters: Optional[List[str]] = None):
-        """Initialize a new move.
+        """Initialize a new word-making move.
 
         Parameters
         ----------
@@ -244,6 +257,8 @@ class Move(object):
             If player is negative or if word contains invalid characters
 
         """
+        super().__init__()
+        
         if player < 0:
             raise ValueError("Player must be non-negative")
         
@@ -267,5 +282,45 @@ class Move(object):
             self.pool_letters = []
         else:
             self.pool_letters = pool_letters
+
+
+@dataclass
+class DrawLetters(Move):
+    """Represents a deterministic move where specific letters are drawn from the bag to the pool.
+    
+    This move is not associated with a specific player as it represents the game
+    mechanism of drawing letters from the bag.
+
+    Attributes
+    ----------
+    letters : List[str]
+        Specific letters to draw from the bag to the pool
+
+    """
+    letters: List[str]
+    
+    def __init__(self, letters: List[str]):
+        """Initialize a new letter-drawing move.
+
+        Parameters
+        ----------
+        letters : List[str]
+            Specific letters to draw from the bag to the pool.
+            Each letter must be 'a' to 'z'.
+
+        Raises
+        ------
+        ValueError
+            If letters contains invalid characters
+
+        """
+        super().__init__()
+        
+        # Validate letters
+        for letter in letters:
+            if not isinstance(letter, str) or len(letter) != 1 or not ('a' <= letter.lower() <= 'z'):
+                raise ValueError(f"Invalid letter: '{letter}'. Only single letters 'a' to 'z' are allowed.")
+        
+        self.letters = [letter.lower() for letter in letters]
 
 
