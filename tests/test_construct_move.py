@@ -27,7 +27,7 @@ def test_construct_move_from_pool_only():
     assert new_state.num_players == 2
     assert len(new_state.words_per_player[0]) == 1
     assert new_state.words_per_player[0][0].word == "cat"
-    assert new_state.scores[0] == 3  # length of "cat"
+    assert new_state.scores[0] == 5  # Scrabble score: c(3) + a(1) + t(1) = 5
     assert new_state.pool[0] == 0  # 'a' used
     assert new_state.pool[2] == 0  # 'c' used
     assert new_state.pool[19] == 0  # 't' used
@@ -54,7 +54,7 @@ def test_construct_move_with_existing_word():
     assert len(new_state.words_per_player[0]) == 0  # "cat" was used
     assert len(new_state.words_per_player[1]) == 1  # "cats" was added
     assert new_state.words_per_player[1][0].word == "cats"
-    assert new_state.scores[1] == 4  # length of "cats"
+    assert new_state.scores[1] == 6  # Scrabble score: c(3) + a(1) + t(1) + s(1) = 6
     assert new_state.pool[18] == 0  # 's' used
 
 def test_construct_move_impossible_word():
