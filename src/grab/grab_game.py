@@ -8,6 +8,9 @@ SCRABBLE_LETTER_SCORES = np.array([
     1, 3, 3, 2, 1, 4, 2, 4, 1, 8, 5, 1, 3, 1, 1, 3, 10, 1, 1, 1, 1, 4, 4, 8, 4, 10
 ])
 
+# Pre-computed character array for performance
+LETTERS = [chr(ord('a') + i) for i in range(26)]
+
 
 class Grab(object):
     """This class implements the logic of the grab game.
@@ -70,26 +73,11 @@ class Grab(object):
             If the player is out of range or the word contains invalid characters
 
         """
-        # Algorithm overview
-        # 0. First construct a letter counts array for the central pool similar to the
-        #    one stored per word, and another for the new word.
-        # 1. Construct a list existing_words_to_use, where each entry is a *set*
-        #    of existing words to be use.  For now this list only includes sets of
-        #    zero or one existing word, and is in increasing order of set size.
-        # 2. For each entry of this list, figure out the remaining letter counts if these
-        #    words were used.  This can be done efficiently by subtracting letter counts.
-        #    If the result of the subtraction has any negative entries, go to next iteration
-        # 3. Otherwise (if the remaining letter counts are nonnegative), check if they can
-        #    be all obtained from the pool, by checking if remaining_counts <= pool_counts.
-        # 4. If yes, construct and return the Move and State.  If not, go back to 2)
-        #    for the next iteration.
-        # 5. If the loop terminates, the word cannot be made.
-        
         # Input validation
         if player < 0 or player >= state.num_players:
             raise ValueError(f"Player {player} is out of range (0-{state.num_players-1})")
         
-        # Step 0: Construct letter counts for the new word
+        # Construct letter counts for the new word
         try:
             target_word = Word(word)
         except ValueError as e:
@@ -98,39 +86,53 @@ class Grab(object):
         target_counts = target_word.letter_counts
         pool_counts = state.pool
         
-        # Step 1: Construct list of existing words to use (sets of 0 or 1 word)
-        existing_words_to_use = []
-        
-        # First try with no existing words (empty set)
-        existing_words_to_use.append([])
-        
-        # Then try with each individual existing word from all players
+        # Early feasibility check: quick rejection if impossible
+        total_available = pool_counts.copy()
         for p in range(state.num_players):
             for word_obj in state.words_per_player[p]:
-                existing_words_to_use.append([(p, word_obj)])
+                total_available += word_obj.letter_counts
         
-        # Step 2-4: Try each combination
-        for word_set in existing_words_to_use:
+        if np.any(target_counts > total_available):
+            raise NoWordFoundException(word, state)
+        
+        # Build list of word options with indices for O(1) removal later
+        # Each entry is (player_idx, word_idx, word_obj)
+        existing_word_options = []
+        
+        # First option: no existing words
+        existing_word_options.append([])
+        
+        # Then each individual existing word from all players
+        for p in range(state.num_players):
+            for w_idx, word_obj in enumerate(state.words_per_player[p]):
+                existing_word_options.append([(p, w_idx, word_obj)])
+        
+        # Try each combination
+        for word_set in existing_word_options:
             # Calculate remaining letter counts after using these words
             remaining_counts = target_counts.copy()
-            other_player_words = []
+            used_word_indices = []  # Store (player_idx, word_idx) for efficient removal
+            other_player_words = []  # For the MakeWord object
             
-            for p, word_obj in word_set:
+            for p, w_idx, word_obj in word_set:
                 remaining_counts -= word_obj.letter_counts
+                used_word_indices.append((p, w_idx))
                 other_player_words.append((p, word_obj.word))
             
             # Check if remaining counts are non-negative
             if np.any(remaining_counts < 0):
                 continue
             
-            # Step 3: Check if remaining letters can be obtained from pool
+            # Check if remaining letters can be obtained from pool
             if np.all(remaining_counts <= pool_counts):
-                # Step 4: Construct the Move
+                # Found a valid combination - now construct move and state
+                
+                # Build pool_letters list efficiently
                 pool_letters = []
                 for letter_idx in range(26):
-                    letter_char = chr(ord('a') + letter_idx)
-                    for _ in range(remaining_counts[letter_idx]):
-                        pool_letters.append(letter_char)
+                    count = remaining_counts[letter_idx]
+                    if count > 0:
+                        pool_letters.extend([LETTERS[letter_idx]] * count)
                 
                 move = MakeWord(
                     player=player,
@@ -139,37 +141,29 @@ class Grab(object):
                     pool_letters=pool_letters
                 )
                 
-                # Construct the new state after applying this move
+                # Lazy state creation - only create after confirming valid move
                 new_state = State(
                     num_players=state.num_players,
                     words_per_player=[words[:] for words in state.words_per_player],  # Deep copy
-                    pool=state.pool.copy(),
+                    pool=pool_counts - remaining_counts,  # Efficient pool update
                     bag=state.bag.copy(),
                     scores=state.scores.copy()
                 )
                 
-                # Remove used words from their original players
-                for p, word_str in other_player_words:
-                    # Find and remove the word from player p's word list
-                    for i, word_obj in enumerate(new_state.words_per_player[p]):
-                        if word_obj.word == word_str:
-                            new_state.words_per_player[p].pop(i)
-                            break
+                # Remove used words efficiently using stored indices (in reverse order)
+                for p, w_idx in sorted(used_word_indices, key=lambda x: x[1], reverse=True):
+                    new_state.words_per_player[p].pop(w_idx)
                 
-                # Remove used letters from the pool
-                for letter_idx in range(26):
-                    new_state.pool[letter_idx] -= remaining_counts[letter_idx]
+                # Add the new word to the current player's word list (reuse target_word)
+                new_state.words_per_player[player].append(target_word)
                 
-                # Add the new word to the current player's word list
-                new_state.words_per_player[player].append(Word(word))
-                
-                # Update the current player's score (sum of letter values in the new word)
+                # Update the current player's score
                 word_score = np.dot(target_word.letter_counts, self.letter_scores)
                 new_state.scores[player] += word_score
                 
                 return move, new_state
         
-        # Step 5: If we get here, the word cannot be made
+        # If we get here, the word cannot be made
         raise NoWordFoundException(word, state)
 
     def construct_draw_letters(self, state: State, num_letters: int = 1) -> tuple[DrawLetters, State]:
