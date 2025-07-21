@@ -1,7 +1,7 @@
 from typing import Set
 import os
 import numpy as np
-from .grab_state import State, Word, MakeWord, DrawLetters, NoWordFoundException
+from .grab_state import State, Word, MakeWord, DrawLetters, NoWordFoundException, DisallowedWordException
 
 # Standard Scrabble letter scores (A=1, B=3, C=3, ...)
 SCRABBLE_LETTER_SCORES = np.array([
@@ -20,13 +20,19 @@ class Grab(object):
     letter_scores : np.ndarray, optional
         Length-26 array containing per-letter scores (a=0, b=1, ..., z=25).
         Defaults to standard Scrabble letter scores.
+    word_list : str, optional
+        Designates the list of allowed words.  Either 'twl06' or 'sowpods'.
+    
     """
 
-    def __init__(self, letter_scores: np.ndarray = None):
+    def __init__(self, word_list: str = 'twl06', letter_scores: np.ndarray = None):
         """Initialize a Grab game instance.
         
         Parameters
         ----------
+        word_list : str, optional
+            Designates the list of allowed words.  Either 'twl06' or 'sowpods'.
+            Defaults to 'twl06'.
         letter_scores : np.ndarray, optional
             Length-26 array containing per-letter scores (a=0, b=1, ..., z=25).
             Defaults to standard Scrabble letter scores.
@@ -37,6 +43,8 @@ class Grab(object):
             if len(letter_scores) != 26:
                 raise ValueError("letter_scores must be a length-26 array")
             self.letter_scores = np.array(letter_scores)
+        
+        self.valid_words = load_word_list(word_list)
 
     
     def construct_move(self, state: State, player: int, word: str) -> tuple[MakeWord, State]:
@@ -67,6 +75,8 @@ class Grab(object):
 
         Raises
         ------
+        DisallowedWordException
+            If the word is not in the allowed word list
         NoWordFoundException
             If the word could not be made given the current board state
         ValueError
@@ -76,6 +86,10 @@ class Grab(object):
         # Input validation
         if player < 0 or player >= state.num_players:
             raise ValueError(f"Player {player} is out of range (0-{state.num_players-1})")
+        
+        # Check if word is in valid word list
+        if word.lower() not in self.valid_words:
+            raise DisallowedWordException(word)
         
         # Construct letter counts for the new word
         try:

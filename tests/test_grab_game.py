@@ -5,7 +5,7 @@ Unit tests for Grab game logic and scoring
 import unittest
 import numpy as np
 from src.grab.grab_game import Grab, SCRABBLE_LETTER_SCORES
-from src.grab.grab_state import State, Word, MakeWord, DrawLetters, NoWordFoundException
+from src.grab.grab_state import State, Word, MakeWord, DrawLetters, NoWordFoundException, DisallowedWordException
 
 
 class TestGrab(unittest.TestCase):
@@ -270,6 +270,90 @@ class TestGrab(unittest.TestCase):
         # Verify new state is different
         self.assertFalse(np.array_equal(new_state.bag, original_bag))
         self.assertFalse(np.array_equal(new_state.pool, original_pool))
+
+    def test_word_list_validation_valid_word(self):
+        """Test that valid words from word list are accepted"""
+        game = Grab('twl06')
+        
+        # Create a simple game state with letters for "cat" (should be in word list)
+        state = State(
+            num_players=1,
+            words_per_player=[[]],
+            pool=np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]),  # a, c, t
+            bag=np.zeros(26),
+            scores=np.array([0])
+        )
+        
+        # "cat" should be valid and not raise exception
+        move, new_state = game.construct_move(state, 0, "cat")
+        self.assertIsInstance(move, MakeWord)
+        self.assertEqual(move.word, "cat")
+
+    def test_word_list_validation_invalid_word(self):
+        """Test that invalid words not in word list are rejected"""
+        game = Grab('twl06')
+        
+        # Create a simple game state with letters for "xyz" (should not be in word list)
+        state = State(
+            num_players=1,
+            words_per_player=[[]],
+            pool=np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]),  # x, y, z
+            bag=np.zeros(26),
+            scores=np.array([0])
+        )
+        
+        # "xyz" should raise DisallowedWordException
+        with self.assertRaises(DisallowedWordException) as context:
+            game.construct_move(state, 0, "xyz")
+        
+        self.assertEqual(context.exception.word, "xyz")
+        self.assertIn("not in the allowed word list", str(context.exception))
+
+    def test_word_list_validation_case_insensitive(self):
+        """Test that word validation is case insensitive"""
+        game = Grab('twl06')
+        
+        # Create a simple game state with letters for "CAT"
+        state = State(
+            num_players=1,
+            words_per_player=[[]],
+            pool=np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]),  # a, c, t
+            bag=np.zeros(26),
+            scores=np.array([0])
+        )
+        
+        # "CAT" should be accepted (case insensitive)
+        move, new_state = game.construct_move(state, 0, "CAT")
+        self.assertIsInstance(move, MakeWord)
+        self.assertEqual(move.word, "CAT")
+
+    def test_different_word_lists(self):
+        """Test that different word lists can be loaded and behave differently"""
+        game_twl06 = Grab('twl06')
+        game_sowpods = Grab('sowpods')
+        
+        # Both should have loaded word lists
+        self.assertIsNotNone(game_twl06.valid_words)
+        self.assertIsNotNone(game_sowpods.valid_words)
+        self.assertIsInstance(game_twl06.valid_words, set)
+        self.assertIsInstance(game_sowpods.valid_words, set)
+        
+        # "ch" is in SOWPODS but not TWL06
+        state = State(
+            num_players=1,
+            words_per_player=[[]],
+            pool=np.array([0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),  # c, h
+            bag=np.zeros(26),
+            scores=np.array([0])
+        )
+        
+        # "ch" should work with SOWPODS but fail with TWL06
+        move, new_state = game_sowpods.construct_move(state, 0, "ch")
+        self.assertIsInstance(move, MakeWord)
+        self.assertEqual(move.word, "ch")
+        
+        with self.assertRaises(DisallowedWordException):
+            game_twl06.construct_move(state, 0, "ch")
 
 
 if __name__ == '__main__':

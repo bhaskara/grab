@@ -35,6 +35,28 @@ class NoWordFoundException(Exception):
         super().__init__(message)
 
 
+class DisallowedWordException(Exception):
+    """Exception raised when a word is not in the allowed word list.
+    
+    Attributes
+    ----------
+    word : str
+        The word that is not allowed
+    """
+    
+    def __init__(self, word: str):
+        """Initialize the exception.
+        
+        Parameters
+        ----------
+        word : str
+            The word that is not allowed
+        """
+        self.word = word
+        message = f"Word '{word}' is not in the allowed word list"
+        super().__init__(message)
+
+
 # Standard Scrabble letter distribution
 STANDARD_SCRABBLE_DISTRIBUTION = np.array([
     9,  # A
