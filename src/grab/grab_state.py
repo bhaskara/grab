@@ -8,54 +8,6 @@ from typing import List, Set, Optional, Tuple
 import numpy as np
 
 
-class NoWordFoundException(Exception):
-    """Exception raised when construct_move cannot find a valid word combination.
-    
-    Attributes
-    ----------
-    word : str
-        The word that could not be constructed
-    state : State
-        The game state when the attempt was made
-    """
-    
-    def __init__(self, word: str, state: 'State'):
-        """Initialize the exception.
-        
-        Parameters
-        ----------
-        word : str
-            The word that could not be constructed
-        state : State
-            The game state when the attempt was made
-        """
-        self.word = word
-        self.state = state
-        message = f"Cannot construct word '{word}' with available letters and words"
-        super().__init__(message)
-
-
-class DisallowedWordException(Exception):
-    """Exception raised when a word is not in the allowed word list.
-    
-    Attributes
-    ----------
-    word : str
-        The word that is not allowed
-    """
-    
-    def __init__(self, word: str):
-        """Initialize the exception.
-        
-        Parameters
-        ----------
-        word : str
-            The word that is not allowed
-        """
-        self.word = word
-        message = f"Word '{word}' is not in the allowed word list"
-        super().__init__(message)
-
 
 # Standard Scrabble letter distribution
 STANDARD_SCRABBLE_DISTRIBUTION = np.array([

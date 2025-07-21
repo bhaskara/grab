@@ -4,8 +4,8 @@ Unit tests for Grab game logic and scoring
 
 import unittest
 import numpy as np
-from src.grab.grab_game import Grab, SCRABBLE_LETTER_SCORES
-from src.grab.grab_state import State, Word, MakeWord, DrawLetters, NoWordFoundException, DisallowedWordException
+from src.grab.grab_game import Grab, SCRABBLE_LETTER_SCORES, NoWordFoundException, DisallowedWordException
+from src.grab.grab_state import State, Word, MakeWord, DrawLetters
 
 
 class TestGrab(unittest.TestCase):
@@ -313,7 +313,7 @@ class TestGrab(unittest.TestCase):
         """Test that word validation is case insensitive"""
         game = Grab('twl06')
         
-        # Create a simple game state with letters for "CAT"
+        # Create a simple game state with letters for "cat"
         state = State(
             num_players=1,
             words_per_player=[[]],
@@ -322,10 +322,10 @@ class TestGrab(unittest.TestCase):
             scores=np.array([0])
         )
         
-        # "CAT" should be accepted (case insensitive)
-        move, new_state = game.construct_move(state, 0, "CAT")
+        # "cat" should be accepted (case insensitive)
+        move, new_state = game.construct_move(state, 0, "cat")
         self.assertIsInstance(move, MakeWord)
-        self.assertEqual(move.word, "CAT")
+        self.assertEqual(move.word, "cat")
 
     def test_different_word_lists(self):
         """Test that different word lists can be loaded and behave differently"""

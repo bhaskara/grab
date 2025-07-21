@@ -1,7 +1,57 @@
 from typing import Set
 import os
 import numpy as np
-from .grab_state import State, Word, MakeWord, DrawLetters, NoWordFoundException, DisallowedWordException
+from .grab_state import State, Word, MakeWord, DrawLetters
+
+
+class NoWordFoundException(Exception):
+    """Exception raised when construct_move cannot find a valid word combination.
+    
+    Attributes
+    ----------
+    word : str
+        The word that could not be constructed
+    state : State
+        The game state when the attempt was made
+    """
+    
+    def __init__(self, word: str, state: 'State'):
+        """Initialize the exception.
+        
+        Parameters
+        ----------
+        word : str
+            The word that could not be constructed
+        state : State
+            The game state when the attempt was made
+        """
+        self.word = word
+        self.state = state
+        message = f"Cannot construct word '{word}' with available letters and words"
+        super().__init__(message)
+
+
+class DisallowedWordException(Exception):
+    """Exception raised when a word is not in the allowed word list.
+    
+    Attributes
+    ----------
+    word : str
+        The word that is not allowed
+    """
+    
+    def __init__(self, word: str):
+        """Initialize the exception.
+        
+        Parameters
+        ----------
+        word : str
+            The word that is not allowed
+        """
+        self.word = word
+        message = f"Word '{word}' is not in the allowed word list"
+        super().__init__(message)
+
 
 # Standard Scrabble letter scores (A=1, B=3, C=3, ...)
 SCRABBLE_LETTER_SCORES = np.array([
