@@ -255,32 +255,228 @@ Authorization: Bearer <session_token>
 ---
 
 
-### 4. WebSocket Connection
+### 4. Socket.IO Real-Time Communication
 
-#### `GET /api/games/{game_id}/connect`
-Establishes a WebSocket connection for real-time game communication. This endpoint upgrades the HTTP connection to WebSocket.
+The server uses **Socket.IO** for real-time communication instead of standard WebSocket. This provides better reliability with automatic reconnection, fallback protocols, and event-based messaging.
 
-**Headers:**
+**Socket.IO Benefits:**
+- **Automatic Reconnection** - Clients reconnect automatically with exponential backoff
+- **Protocol Fallback** - Falls back to long-polling if WebSocket is unavailable
+- **Event System** - Named events instead of raw message parsing
+- **Room Management** - Built-in support for broadcasting to game rooms  
+- **Connection Health** - Automatic ping/pong and connection monitoring
+
+#### **Socket.IO Connection**
+
+**JavaScript/Browser:**
+```javascript
+const socket = io('http://localhost:5000', {
+  auth: {
+    token: 'jwt-session-token-here'
+  }
+});
 ```
-Authorization: Bearer <session_token>
-Connection: Upgrade
-Upgrade: websocket
-Sec-WebSocket-Key: <client-generated-key>
-Sec-WebSocket-Version: 13
+
+**Python Client:**
+```python
+import socketio
+
+sio = socketio.Client()
+sio.connect('http://localhost:5000', auth={'token': 'jwt-session-token-here'})
 ```
+
+**Authentication:**
+- Include JWT session token in `auth.token` field during connection
+- Token can also be provided via query parameter: `?token=jwt-session-token`
+- Connection will be rejected if token is invalid or missing
+
+**Connection Events:**
+- `connected` - Emitted when authentication succeeds
+- `error` - Emitted for authentication or connection errors
+
+---
+
+#### **Socket.IO Events**
+
+### **Client → Server Events**
+
+#### **`join_game`**
+Join a game room to receive real-time updates.
+
+**Data:**
+```json
+{
+  "game_id": "ABC123"
+}
+```
+
+**Responses:**
+- `game_state` - Current game state (on success)
+- `error` - Error message if join fails
+
+**Requirements:**
+- Player must be authenticated
+- Player must have already joined the game via HTTP API
+- Game must be in "active" status
+
+---
+
+#### **`move`**
+Send a move to the game.
+
+**Data:**
+```json
+{
+  "data": "move-string-specific-to-game-type"
+}
+```
+
+**Responses:**
+- `move_result` - Success/failure with updated game state
+- `game_state` - Broadcast to all players in the game (on success)
+
+**Response Format:**
+```json
+{
+  "success": true|false,
+  "error": "error-message-if-failed",
+  "game_state": { ... }  // Only on success
+}
+```
+
+---
+
+#### **`get_status`**
+Request current game state.
+
+**Data:** None
 
 **Response:**
-- `101 Switching Protocols` - WebSocket connection established
-- `401` - Invalid or missing session token
-- `404` - Game not found
-- `403` - Player not in this game
-- `400` - Game not active or WebSocket upgrade failed
+- `game_state` - Current game state
+- `error` - If not in a game or other error
 
-**Notes:**
-- Player must have already joined the game via `POST /api/games/{game_id}/join`
-- Game must be in "active" status
-- WebSocket messages will be documented separately
-- Connection is automatically closed if the game ends or player leaves
+---
+
+#### **`player_action`**
+Send non-move actions to the game.
+
+**Data:**
+```json
+{
+  "data": "action-type"
+}
+```
+
+**Supported Actions:**
+- `"ready_for_next_turn"` - Signal ready to proceed to next turn
+
+**Response:**
+- `game_state` - Broadcast to all players (on success)
+- `error` - If action fails
+
+---
+
+### **Server → Client Events**
+
+#### **`game_state`**
+Current game state broadcast to all players.
+
+**Data:**
+```json
+{
+  "data": {
+    "game_id": "ABC123",
+    "game_type": "dummy",
+    "status": "active",
+    "current_turn": 1,
+    "turn_time_remaining": null,
+    "players": {
+      "username1": {
+        "connected": true,
+        "score": 0,
+        "ready_for_next_turn": false
+      },
+      "username2": {
+        "connected": false,
+        "score": 5,
+        "ready_for_next_turn": true
+      }
+    },
+    "state": "{\"game-specific-state-json\"}"
+  }
+}
+```
+
+---
+
+#### **`move_result`**
+Response to a move attempt.
+
+**Data:**
+```json
+{
+  "success": true|false,
+  "error": "error-message-if-failed",
+  "game_state": { ... }  // Game state object (only on success)
+}
+```
+
+---
+
+#### **`player_disconnected`**
+Broadcast when a player disconnects.
+
+**Data:**
+```json
+{
+  "player": "username"
+}
+```
+
+---
+
+#### **`player_reconnected`**
+Broadcast when a player reconnects.
+
+**Data:**
+```json
+{
+  "player": "username"
+}
+```
+
+---
+
+#### **`connected`**
+Sent to client after successful authentication.
+
+**Data:**
+```json
+{
+  "message": "Successfully connected"
+}
+```
+
+---
+
+#### **`error`**
+Error messages for various failures.
+
+**Data:**
+```json
+{
+  "message": "error-description"
+}
+```
+
+**Common Errors:**
+- `"Authentication token required"`
+- `"Invalid or expired token"`
+- `"Not authenticated"`
+- `"Game not found"`
+- `"Player not in this game"`
+- `"Game is not active"`
+- `"Not in a game"`
 
 ---
 
@@ -306,7 +502,9 @@ Sec-WebSocket-Version: 13
 - Prevent race conditions when starting games or checking capacity
 - Use appropriate locking mechanisms for game state modifications
 
-### WebSocket Lifecycle
-- Automatically clean up WebSocket connections on game end
-- Handle client disconnections gracefully
-- Implement ping/pong for connection health monitoring
+### Socket.IO Lifecycle
+- Automatic reconnection with exponential backoff on client disconnections
+- Graceful handling of player disconnections with notifications to other players
+- Built-in ping/pong for connection health monitoring
+- Automatic cleanup of connections when games end or players leave
+- Players are automatically removed from game rooms on disconnection
