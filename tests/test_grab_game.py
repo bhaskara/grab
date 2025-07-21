@@ -355,6 +355,120 @@ class TestGrab(unittest.TestCase):
         with self.assertRaises(DisallowedWordException):
             game_twl06.construct_move(state, 0, "ch")
 
+    def test_end_game_no_words(self):
+        """Test end_game with no words on the board"""
+        game = Grab()
+        
+        # Create a state with no words for any player
+        state = State(
+            num_players=2,
+            words_per_player=[[], []],
+            pool=np.zeros(26),
+            bag=np.zeros(26),
+            scores=np.array([10, 5])  # Starting scores
+        )
+        
+        end_state = game.end_game(state)
+        
+        # Scores should remain unchanged (no bonus)
+        self.assertEqual(end_state.scores[0], 10)
+        self.assertEqual(end_state.scores[1], 5)
+
+    def test_end_game_with_words(self):
+        """Test end_game with words on the board"""
+        game = Grab()
+        
+        # Create words for players
+        word_cat = Word("cat")  # c(3) + a(1) + t(1) = 5 points
+        word_dog = Word("dog")  # d(2) + o(1) + g(2) = 5 points
+        word_fish = Word("fish")  # f(4) + i(1) + s(1) + h(4) = 10 points
+        
+        state = State(
+            num_players=2,
+            words_per_player=[[word_cat, word_dog], [word_fish]],
+            pool=np.zeros(26),
+            bag=np.zeros(26),
+            scores=np.array([15, 8])  # Starting scores
+        )
+        
+        end_state = game.end_game(state)
+        
+        # Player 0 gets bonus: cat(5) + dog(5) = 10, total = 15 + 10 = 25
+        # Player 1 gets bonus: fish(10), total = 8 + 10 = 18
+        self.assertEqual(end_state.scores[0], 25)
+        self.assertEqual(end_state.scores[1], 18)
+
+    def test_end_game_state_immutability(self):
+        """Test that end_game doesn't modify the original state"""
+        game = Grab()
+        
+        word_cat = Word("cat")
+        original_scores = np.array([10, 5])
+        original_words = [[word_cat], []]
+        
+        state = State(
+            num_players=2,
+            words_per_player=original_words,
+            pool=np.zeros(26),
+            bag=np.zeros(26),
+            scores=original_scores.copy()
+        )
+        
+        # Store original values
+        original_score_0 = state.scores[0]
+        original_word_count = len(state.words_per_player[0])
+        
+        end_state = game.end_game(state)
+        
+        # Original state should be unchanged
+        self.assertEqual(state.scores[0], original_score_0)
+        self.assertEqual(len(state.words_per_player[0]), original_word_count)
+        
+        # End state should have bonus added
+        self.assertEqual(end_state.scores[0], original_score_0 + 5)  # cat = 5 points
+
+    def test_end_game_custom_letter_scores(self):
+        """Test end_game with custom letter scoring"""
+        # All letters worth 2 points
+        custom_scores = np.full(26, 2)
+        game = Grab(letter_scores=custom_scores)
+        
+        word_cat = Word("cat")  # 3 letters * 2 points each = 6 points
+        
+        state = State(
+            num_players=1,
+            words_per_player=[[word_cat]],
+            pool=np.zeros(26),
+            bag=np.zeros(26),
+            scores=np.array([10])
+        )
+        
+        end_state = game.end_game(state)
+        
+        # Player should get 6 point bonus: 10 + 6 = 16
+        self.assertEqual(end_state.scores[0], 16)
+
+    def test_end_game_multiple_words_same_player(self):
+        """Test end_game when one player has multiple words"""
+        game = Grab()
+        
+        word_a = Word("a")      # a(1) = 1 point
+        word_at = Word("at")    # a(1) + t(1) = 2 points
+        word_cat = Word("cat")  # c(3) + a(1) + t(1) = 5 points
+        
+        state = State(
+            num_players=1,
+            words_per_player=[[word_a, word_at, word_cat]],
+            pool=np.zeros(26),
+            bag=np.zeros(26),
+            scores=np.array([0])
+        )
+        
+        end_state = game.end_game(state)
+        
+        # Player should get bonus: a(1) + at(2) + cat(5) = 8 points
+        self.assertEqual(end_state.scores[0], 8)
+
 
 if __name__ == '__main__':
     unittest.main()

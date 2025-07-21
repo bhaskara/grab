@@ -230,6 +230,46 @@ class Grab(object):
         # If we get here, the word cannot be made
         raise NoWordFoundException(word, state)
 
+
+    def end_game(self, state: State) -> State:
+        """Return the state after ending the game.
+
+        When we end the game, each player's score is increased by the scores of the
+        words currently in front of them.
+
+        Parameters
+        ----------
+        state : State
+            The current game state
+
+        Returns
+        -------
+        State
+            The final game state with bonus scores added
+        """
+        # Create a new state as a copy of the current state
+        end_state = State(
+            num_players=state.num_players,
+            words_per_player=[words[:] for words in state.words_per_player],  # Deep copy
+            pool=state.pool.copy(),
+            bag=state.bag.copy(),
+            scores=state.scores.copy()
+        )
+        
+        # Add bonus scores for each player based on their remaining words
+        for player in range(state.num_players):
+            bonus_score = 0
+            for word in state.words_per_player[player]:
+                # Calculate the score for this word using letter scores
+                word_score = np.dot(word.letter_counts, self.letter_scores)
+                bonus_score += word_score
+            
+            # Add the bonus to the player's score
+            end_state.scores[player] += bonus_score
+        
+        return end_state
+    
+
     def construct_draw_letters(self, state: State, num_letters: int = 1) -> tuple[DrawLetters, State]:
         """Construct a DrawLetters move that draws random letters from the bag to the pool.
 
