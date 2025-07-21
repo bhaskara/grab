@@ -67,19 +67,24 @@ class Grab(object):
 
     Parameters
     ----------
+    num_players : int, optional
+        Number of players in the game. Defaults to 2.
+    word_list : str, optional
+        Designates the list of allowed words.  Either 'twl06' or 'sowpods'.
+        Defaults to 'twl06'.
     letter_scores : np.ndarray, optional
         Length-26 array containing per-letter scores (a=0, b=1, ..., z=25).
         Defaults to standard Scrabble letter scores.
-    word_list : str, optional
-        Designates the list of allowed words.  Either 'twl06' or 'sowpods'.
     
     """
 
-    def __init__(self, word_list: str = 'twl06', letter_scores: np.ndarray = None):
+    def __init__(self, num_players: int = 2, word_list: str = 'twl06', letter_scores: np.ndarray = None):
         """Initialize a Grab game instance.
         
         Parameters
         ----------
+        num_players : int, optional
+            Number of players in the game. Defaults to 2.
         word_list : str, optional
             Designates the list of allowed words.  Either 'twl06' or 'sowpods'.
             Defaults to 'twl06'.
@@ -87,6 +92,9 @@ class Grab(object):
             Length-26 array containing per-letter scores (a=0, b=1, ..., z=25).
             Defaults to standard Scrabble letter scores.
         """
+        if num_players < 1:
+            raise ValueError("Number of players must be at least 1")
+        
         if letter_scores is None:
             self.letter_scores = SCRABBLE_LETTER_SCORES.copy()
         else:
@@ -95,7 +103,38 @@ class Grab(object):
             self.letter_scores = np.array(letter_scores)
         
         self.valid_words = load_word_list(word_list)
+        
+        # Initialize the game state to the starting state
+        self._state = State(num_players=num_players)
 
+    @property
+    def state(self) -> State:
+        """Get the current game state.
+        
+        Returns
+        -------
+        State
+            The current game state
+        """
+        return self._state
+    
+    @state.setter
+    def state(self, new_state: State) -> None:
+        """Set the current game state.
+        
+        Parameters
+        ----------
+        new_state : State
+            The new game state to set
+        
+        Raises
+        ------
+        TypeError
+            If new_state is not a State instance
+        """
+        if not isinstance(new_state, State):
+            raise TypeError("state must be a State instance")
+        self._state = new_state
     
     def construct_move(self, state: State, player: int, word: str) -> tuple[MakeWord, State]:
         """Construct a Move that enables a player to make a particular word.

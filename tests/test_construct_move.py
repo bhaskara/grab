@@ -4,7 +4,7 @@
 import pytest
 import numpy as np
 from src.grab.grab_state import State, Word
-from src.grab.grab_game import Grab, NoWordFoundException
+from src.grab.grab_game import Grab, NoWordFoundException, DisallowedWordException
 
 def test_construct_move_from_pool_only():
     """Test making a word using only pool letters."""
@@ -75,11 +75,11 @@ def test_construct_move_invalid_player():
         game.construct_move(state, 5, "cat")
 
 def test_construct_move_invalid_word():
-    """Test that invalid word raises ValueError."""
+    """Test that invalid word raises DisallowedWordException."""
     game = Grab()
     state = State(num_players=2)
     
-    with pytest.raises(ValueError, match="Invalid word 'cat1'"):
+    with pytest.raises(DisallowedWordException, match="Word 'cat1' is not in the allowed word list"):
         game.construct_move(state, 0, "cat1")
 
 if __name__ == "__main__":

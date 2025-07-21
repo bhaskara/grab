@@ -268,24 +268,15 @@ def start_game(game_id):
     if game_type == 'dummy':
         from .dummy_grab import DummyGrab
         game_object = DummyGrab(list(players))
-        # Store the game object in the game server, but keep the original structure
-        original_game_data = game_server.games[game_id]
-        game_server.games[game_id] = {
-            'state': 'running',
-            'players': original_game_data['players'],
-            'game_object': game_object,
-            # Keep all metadata
-            'creator_id': original_game_data['creator_id'],
-            'creator_username': original_game_data['creator_username'],
-            'status': original_game_data['status'],
-            'max_players': original_game_data['max_players'],
-            'time_limit_seconds': original_game_data['time_limit_seconds'],
-            'created_at': original_game_data['created_at'],
-            'started_at': original_game_data['started_at'],
-            'finished_at': original_game_data['finished_at']
-        }
+    elif game_type == 'grab':
+        from .grab_game import Grab
+        game_object = Grab(num_players=len(players))
     else:
         return jsonify({'success': False, 'error': f'Unsupported game type: {game_type}'}), 400
+    
+    # Add game object to existing game data
+    game_server.games[game_id]['state'] = 'running'
+    game_server.games[game_id]['game_object'] = game_object
     
     updated_game_data = game_server.get_game_metadata(game_id)
     return jsonify({

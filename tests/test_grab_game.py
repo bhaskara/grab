@@ -273,7 +273,7 @@ class TestGrab(unittest.TestCase):
 
     def test_word_list_validation_valid_word(self):
         """Test that valid words from word list are accepted"""
-        game = Grab('twl06')
+        game = Grab(word_list='twl06')
         
         # Create a simple game state with letters for "cat" (should be in word list)
         state = State(
@@ -291,7 +291,7 @@ class TestGrab(unittest.TestCase):
 
     def test_word_list_validation_invalid_word(self):
         """Test that invalid words not in word list are rejected"""
-        game = Grab('twl06')
+        game = Grab(word_list='twl06')
         
         # Create a simple game state with letters for "xyz" (should not be in word list)
         state = State(
@@ -311,7 +311,7 @@ class TestGrab(unittest.TestCase):
 
     def test_word_list_validation_case_insensitive(self):
         """Test that word validation is case insensitive"""
-        game = Grab('twl06')
+        game = Grab(word_list='twl06')
         
         # Create a simple game state with letters for "cat"
         state = State(
@@ -329,8 +329,8 @@ class TestGrab(unittest.TestCase):
 
     def test_different_word_lists(self):
         """Test that different word lists can be loaded and behave differently"""
-        game_twl06 = Grab('twl06')
-        game_sowpods = Grab('sowpods')
+        game_twl06 = Grab(word_list='twl06')
+        game_sowpods = Grab(word_list='sowpods')
         
         # Both should have loaded word lists
         self.assertIsNotNone(game_twl06.valid_words)
@@ -468,6 +468,92 @@ class TestGrab(unittest.TestCase):
         
         # Player should get bonus: a(1) + at(2) + cat(5) = 8 points
         self.assertEqual(end_state.scores[0], 8)
+
+    def test_grab_state_initialization(self):
+        """Test that Grab initializes with correct default state"""
+        game = Grab(num_players=3)
+        
+        # Check that state is properly initialized
+        self.assertIsNotNone(game.state)
+        self.assertEqual(game.state.num_players, 3)
+        self.assertEqual(len(game.state.words_per_player), 3)
+        self.assertEqual(len(game.state.scores), 3)
+        
+        # Check that all players start with no words and zero score
+        for i in range(3):
+            self.assertEqual(len(game.state.words_per_player[i]), 0)
+            self.assertEqual(game.state.scores[i], 0)
+        
+        # Check that pool starts empty
+        self.assertTrue(np.all(game.state.pool == 0))
+        
+        # Check that bag starts with standard Scrabble distribution
+        np.testing.assert_array_equal(game.state.bag, State(1).bag)
+
+    def test_grab_state_getter(self):
+        """Test the state getter property"""
+        game = Grab(num_players=2)
+        
+        # Test that we can access the state
+        state = game.state
+        self.assertIsInstance(state, State)
+        self.assertEqual(state.num_players, 2)
+
+    def test_grab_state_setter(self):
+        """Test the state setter property"""
+        game = Grab(num_players=2)
+        
+        # Create a new state with different values
+        new_state = State(
+            num_players=2,
+            pool=np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]),  # a, c, t
+            scores=[10, 5]
+        )
+        
+        # Set the new state
+        game.state = new_state
+        
+        # Verify the state was set correctly
+        self.assertEqual(game.state.scores[0], 10)
+        self.assertEqual(game.state.scores[1], 5)
+        self.assertEqual(game.state.pool[0], 1)  # 'a'
+        self.assertEqual(game.state.pool[2], 1)  # 'c'
+        self.assertEqual(game.state.pool[19], 1)  # 't'
+
+    def test_grab_state_setter_type_validation(self):
+        """Test that state setter validates input type"""
+        game = Grab()
+        
+        # Try to set state to invalid types
+        with self.assertRaises(TypeError) as context:
+            game.state = "not a state"
+        self.assertIn("state must be a State instance", str(context.exception))
+        
+        with self.assertRaises(TypeError) as context:
+            game.state = {"not": "a state"}
+        self.assertIn("state must be a State instance", str(context.exception))
+
+    def test_grab_num_players_validation(self):
+        """Test that invalid num_players raises ValueError"""
+        with self.assertRaises(ValueError) as context:
+            Grab(num_players=0)
+        self.assertIn("Number of players must be at least 1", str(context.exception))
+        
+        with self.assertRaises(ValueError) as context:
+            Grab(num_players=-1)
+        self.assertIn("Number of players must be at least 1", str(context.exception))
+
+    def test_grab_different_num_players(self):
+        """Test Grab initialization with different numbers of players"""
+        # Test single player
+        game1 = Grab(num_players=1)
+        self.assertEqual(game1.state.num_players, 1)
+        self.assertEqual(len(game1.state.scores), 1)
+        
+        # Test four players
+        game4 = Grab(num_players=4)
+        self.assertEqual(game4.state.num_players, 4)
+        self.assertEqual(len(game4.state.scores), 4)
 
 
 if __name__ == '__main__':
