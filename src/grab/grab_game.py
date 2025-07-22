@@ -135,7 +135,7 @@ class Grab(object):
         if not isinstance(new_state, State):
             raise TypeError("state must be a State instance")
         self._state = new_state
-    
+
     def construct_move(self, state: State, player: int, word: str) -> tuple[MakeWord, State]:
         """Construct a Move that enables a player to make a particular word.
 
@@ -250,7 +250,8 @@ class Grab(object):
                     words_per_player=[words[:] for words in state.words_per_player],  # Deep copy
                     pool=pool_counts - remaining_counts,  # Efficient pool update
                     bag=state.bag.copy(),
-                    scores=state.scores.copy()
+                    scores=state.scores.copy(),
+                    passed=state.passed.copy()
                 )
                 
                 # Remove used words efficiently using stored indices (in reverse order)
@@ -292,7 +293,8 @@ class Grab(object):
             words_per_player=[words[:] for words in state.words_per_player],  # Deep copy
             pool=state.pool.copy(),
             bag=state.bag.copy(),
-            scores=state.scores.copy()
+            scores=state.scores.copy(),
+            passed=state.passed.copy()
         )
         
         # Add bonus scores for each player based on their remaining words
@@ -360,7 +362,8 @@ class Grab(object):
             words_per_player=[words[:] for words in state.words_per_player],  # Deep copy
             pool=state.pool.copy(),
             bag=state.bag.copy(),
-            scores=state.scores.copy()
+            scores=state.scores.copy(),
+            passed=[False] * state.num_players
         )
         
         # Remove drawn letters from the bag and add them to the pool

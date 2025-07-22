@@ -40,7 +40,8 @@ class TestGrab(unittest.TestCase):
             words_per_player=[[], []],
             pool=np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]),  # a, c, t
             bag=np.zeros(26),
-            scores=np.array([0, 0])
+            scores=np.array([0, 0]),
+            passed=[True, False]  # Test that passed is preserved
         )
         
         # Make the word "cat" (c=3, a=1, t=1 in Scrabble scoring = 5 points)
@@ -49,6 +50,9 @@ class TestGrab(unittest.TestCase):
         # Check that player 0's score increased by 5
         self.assertEqual(new_state.scores[0], 5)
         self.assertEqual(new_state.scores[1], 0)  # Player 1 unchanged
+        
+        # Check that passed status is preserved
+        self.assertEqual(new_state.passed, [True, False])
 
     def test_construct_move_scoring_custom(self):
         """Test that construct_move calculates scores correctly with custom letter values"""
@@ -140,7 +144,8 @@ class TestGrab(unittest.TestCase):
             words_per_player=[[], []],
             pool=np.zeros(26),
             bag=np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]),  # a, c, t
-            scores=np.array([0, 0])
+            scores=np.array([0, 0]),
+            passed=[True, False]  # Test that passed is reset to all False
         )
         
         # Draw one letter
@@ -160,6 +165,9 @@ class TestGrab(unittest.TestCase):
         letter_idx = ord(drawn_letter) - ord('a')
         self.assertEqual(new_state.bag[letter_idx], state.bag[letter_idx] - 1)
         self.assertEqual(new_state.pool[letter_idx], state.pool[letter_idx] + 1)
+        
+        # Verify that passed status is reset to all False
+        self.assertEqual(new_state.passed, [False, False])
 
     def test_construct_draw_letters_multiple_letters(self):
         """Test drawing multiple letters from the bag"""
@@ -270,6 +278,68 @@ class TestGrab(unittest.TestCase):
         # Verify new state is different
         self.assertFalse(np.array_equal(new_state.bag, original_bag))
         self.assertFalse(np.array_equal(new_state.pool, original_pool))
+
+    def test_construct_move_preserves_passed_status(self):
+        """Test that construct_move preserves the passed status of players"""
+        game = Grab()
+        
+        # Create a state with mixed passed status
+        state = State(
+            num_players=3,
+            words_per_player=[[], [], []],
+            pool=np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]),  # a, c, t
+            bag=np.zeros(26),
+            scores=np.array([0, 0, 0]),
+            passed=[True, False, True]
+        )
+        
+        # Make a word with player 1
+        move, new_state = game.construct_move(state, 1, "cat")
+        
+        # Verify passed status is preserved exactly
+        self.assertEqual(new_state.passed, [True, False, True])
+
+    def test_construct_draw_letters_resets_passed_status(self):
+        """Test that construct_draw_letters resets all players' passed status to False"""
+        game = Grab()
+        
+        # Create a state where all players have passed
+        state = State(
+            num_players=4,
+            words_per_player=[[], [], [], []],
+            pool=np.zeros(26),
+            bag=np.array([2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),  # Multiple letters
+            scores=np.array([0, 0, 0, 0]),
+            passed=[True, True, True, True]
+        )
+        
+        # Draw letters
+        move, new_state = game.construct_draw_letters(state, 2)
+        
+        # Verify all passed status is reset to False
+        self.assertEqual(new_state.passed, [False, False, False, False])
+        
+    def test_construct_draw_letters_resets_mixed_passed_status(self):
+        """Test that construct_draw_letters resets mixed passed status to all False"""
+        game = Grab()
+        
+        # Create a state with mixed passed status
+        state = State(
+            num_players=3,
+            words_per_player=[[], [], []],
+            pool=np.ones(26),  # Some letters already in pool
+            bag=np.array([3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),  # 3 a's
+            scores=np.array([5, 10, 15]),
+            passed=[False, True, False]
+        )
+        
+        # Draw a letter
+        move, new_state = game.construct_draw_letters(state, 1)
+        
+        # Verify all passed status is reset to False
+        self.assertEqual(new_state.passed, [False, False, False])
+        # Verify other state elements are preserved/updated correctly
+        self.assertEqual(list(new_state.scores), [5, 10, 15])  # Scores should be preserved
 
     def test_word_list_validation_valid_word(self):
         """Test that valid words from word list are accepted"""

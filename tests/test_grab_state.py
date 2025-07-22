@@ -129,6 +129,7 @@ class TestState(unittest.TestCase):
         self.assertEqual(state.num_players, 2)
         self.assertEqual(len(state.words_per_player), 2)
         self.assertEqual(len(state.scores), 2)
+        self.assertEqual(len(state.passed), 2)
         
         # Check that each player has empty word list
         for player_words in state.words_per_player:
@@ -137,6 +138,9 @@ class TestState(unittest.TestCase):
         
         # Check scores are all zero
         self.assertEqual(state.scores, [0, 0])
+        
+        # Check passed are all False
+        self.assertEqual(state.passed, [False, False])
         
         # Check pool is empty
         np.testing.assert_array_equal(state.pool, np.zeros(26, dtype=int))
@@ -150,19 +154,22 @@ class TestState(unittest.TestCase):
         custom_pool = np.ones(26, dtype=int)
         custom_bag = np.full(26, 5, dtype=int)
         custom_scores = [10, 20]
+        custom_passed = [True, False]
         
         state = State(
             num_players=2,
             words_per_player=custom_words,
             pool=custom_pool,
             bag=custom_bag,
-            scores=custom_scores
+            scores=custom_scores,
+            passed=custom_passed
         )
         
         self.assertEqual(state.num_players, 2)
         self.assertEqual(len(state.words_per_player[0]), 0)
         self.assertEqual(len(state.words_per_player[1]), 2)
         self.assertEqual(state.scores, [10, 20])
+        self.assertEqual(state.passed, [True, False])
         np.testing.assert_array_equal(state.pool, custom_pool)
         np.testing.assert_array_equal(state.bag, custom_bag)
 
@@ -188,6 +195,12 @@ class TestState(unittest.TestCase):
             State(num_players=2, scores=[10, 20, 30])  # 3 scores for 2 players
         self.assertIn("scores must have length 2, got 3", str(context.exception))
 
+    def test_state_creation_mismatched_passed(self):
+        """Test creating a State with wrong length passed"""
+        with self.assertRaises(ValueError) as context:
+            State(num_players=2, passed=[True, False, True])  # 3 passed for 2 players
+        self.assertIn("passed must have length 2, got 3", str(context.exception))
+
     def test_state_creation_invalid_pool_shape(self):
         """Test creating a State with wrong pool shape"""
         with self.assertRaises(ValueError) as context:
@@ -205,23 +218,27 @@ class TestState(unittest.TestCase):
         original_pool = np.ones(26, dtype=int)
         original_bag = np.full(26, 5, dtype=int)
         original_scores = [10, 20]
+        original_passed = [True, False]
         
         state = State(
             num_players=2,
             pool=original_pool,
             bag=original_bag,
-            scores=original_scores
+            scores=original_scores,
+            passed=original_passed
         )
         
         # Modify originals
         original_pool[0] = 999
         original_bag[0] = 999
         original_scores[0] = 999
+        original_passed[0] = False
         
         # State should be unchanged
         self.assertEqual(state.pool[0], 1)
         self.assertEqual(state.bag[0], 5)
         self.assertEqual(state.scores[0], 10)
+        self.assertEqual(state.passed[0], True)
 
     def test_standard_scrabble_distribution_constant(self):
         """Test that the standard Scrabble distribution constant is correct"""
@@ -243,7 +260,9 @@ class TestState(unittest.TestCase):
         self.assertEqual(state.num_players, 1)
         self.assertEqual(len(state.words_per_player), 1)
         self.assertEqual(len(state.scores), 1)
+        self.assertEqual(len(state.passed), 1)
         self.assertEqual(state.scores[0], 0)
+        self.assertEqual(state.passed[0], False)
 
     def test_state_with_many_players(self):
         """Test creating a State with many players"""
@@ -253,11 +272,13 @@ class TestState(unittest.TestCase):
         self.assertEqual(state.num_players, num_players)
         self.assertEqual(len(state.words_per_player), num_players)
         self.assertEqual(len(state.scores), num_players)
+        self.assertEqual(len(state.passed), num_players)
         
         # All should be initialized properly
         for i in range(num_players):
             self.assertEqual(len(state.words_per_player[i]), 0)
             self.assertEqual(state.scores[i], 0)
+            self.assertEqual(state.passed[i], False)
 
 
 class TestMakeWord(unittest.TestCase):

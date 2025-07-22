@@ -59,6 +59,8 @@ class State(object):
         method as the letter_counts attribute of the Word class
     scores : List[int]
         Scores per player, where scores[i] is the score for player i
+    passed: List[bool]
+        For each player, whether they have passed since the last letter draw happened.
 
     """
     num_players: int
@@ -66,12 +68,14 @@ class State(object):
     pool: np.ndarray
     bag: np.ndarray
     scores: List[int]
+    passed: List[bool]
     
     def __init__(self, num_players: int, 
                  words_per_player: Optional[List[List['Word']]] = None,
                  pool: Optional[np.ndarray] = None,
                  bag: Optional[np.ndarray] = None,
-                 scores: Optional[List[int]] = None):
+                 scores: Optional[List[int]] = None,
+                 passed: Optional[List[bool]] = None):
         """Initialize a new game state.
 
         Parameters
@@ -88,6 +92,8 @@ class State(object):
             distribution. Must be array of 26 integers representing letter counts.
         scores : List[int], optional
             Initial scores for each player. If None, creates zero scores for all players.
+        passed : List[bool], optional
+            Initial passed status for each player. If None, creates False for all players.
 
         Raises
         ------
@@ -128,6 +134,13 @@ class State(object):
             if bag.shape != (26,):
                 raise ValueError("bag must be an array of 26 integers")
             self.bag = bag.copy()
+        
+        if passed is None:
+            self.passed = [False] * num_players
+        else:
+            if len(passed) != num_players:
+                raise ValueError(f"passed must have length {num_players}, got {len(passed)}")
+            self.passed = passed.copy()
     
 
 @dataclass
