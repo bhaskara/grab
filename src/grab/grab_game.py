@@ -1,7 +1,7 @@
-from typing import Set, Union
+from typing import Set, Union, Optional, Tuple
 import os
 import numpy as np
-from .grab_state import State, Word, MakeWord, DrawLetters
+from .grab_state import State, Word, MakeWord, DrawLetters, Move
 
 
 class NoWordFoundException(Exception):
@@ -136,7 +136,7 @@ class Grab(object):
             raise TypeError("state must be a State instance")
         self._state = new_state
 
-    def handle_action(self, player: int, action: Union[str, int]) -> State:
+    def handle_action(self, player: int, action: Union[str, int]) -> Tuple[State, Optional[Move]]:
         """Handle an action by a player in the current state.
 
         An action is either playing a new word or passing.
@@ -156,6 +156,9 @@ class Grab(object):
         -------
         new_state: State
             The state after making this move
+        move: Move, optional
+            Assuming the player action resulted in a new word, drawing letters, or
+            ending the game, return the Move object.  Else return None.
 
         Raises
         ------
@@ -179,7 +182,7 @@ class Grab(object):
             move, new_state = self.construct_move(current_state, player, action)
             # Update the internal state
             self._state = new_state
-            return new_state
+            return new_state, move
         
         # Handle pass action (integer 0)
         elif action == 0:
@@ -205,16 +208,16 @@ class Grab(object):
                     # Draw a letter (this resets all passed status to False)
                     draw_move, final_state = self.construct_draw_letters(new_state, 1)
                     self._state = final_state
-                    return final_state
+                    return final_state, draw_move
                 else:
                     # No letters left - end the game
                     final_state = self.end_game(new_state)
                     self._state = final_state
-                    return final_state
+                    return final_state, None  # end_game doesn't return a Move
             else:
                 # Not all players have passed - just update state
                 self._state = new_state
-                return new_state
+                return new_state, None  # No move for simple pass
         
         # Invalid action
         else:

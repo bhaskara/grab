@@ -357,13 +357,18 @@ class TestGrab(unittest.TestCase):
         game.state = initial_state
         
         # Handle word action
-        result_state = game.handle_action(0, "cat")
+        result_state, move = game.handle_action(0, "cat")
         
         # Verify the word was created and score updated
         self.assertEqual(len(result_state.words_per_player[0]), 1)
         self.assertEqual(result_state.words_per_player[0][0].word, "cat")
         self.assertEqual(result_state.scores[0], 5)  # c=3, a=1, t=1
         self.assertEqual(result_state.passed, [False, False])  # Passed status preserved
+        
+        # Verify move object was returned
+        self.assertIsInstance(move, MakeWord)
+        self.assertEqual(move.player, 0)
+        self.assertEqual(move.word, "cat")
         
         # Verify game's internal state was updated
         self.assertEqual(game.state, result_state)
@@ -385,7 +390,7 @@ class TestGrab(unittest.TestCase):
         
         # Try invalid word - should raise DisallowedWordException
         with self.assertRaises(DisallowedWordException):
-            game.handle_action(0, "zzqxyw")
+            result_state, move = game.handle_action(0, "zzqxyw")
 
     def test_handle_action_word_no_letters(self):
         """Test handle_action with word that cannot be formed"""
@@ -404,7 +409,7 @@ class TestGrab(unittest.TestCase):
         
         # Try to make word without letters - should raise NoWordFoundException
         with self.assertRaises(NoWordFoundException):
-            game.handle_action(0, "cat")
+            result_state, move = game.handle_action(0, "cat")
 
     def test_handle_action_pass_single_player(self):
         """Test handle_action with pass action for single player"""
@@ -421,13 +426,15 @@ class TestGrab(unittest.TestCase):
         game.state = initial_state
         
         # Handle pass action for player 0
-        result_state = game.handle_action(0, 0)
+        result_state, move = game.handle_action(0, 0)
         
         # Verify player 0 is marked as passed
         self.assertEqual(result_state.passed, [True, False])
         # Verify no other changes
         self.assertEqual(result_state.scores, [0, 0])
         self.assertEqual(len(result_state.words_per_player[0]), 0)
+        # Verify no move returned for simple pass
+        self.assertIsNone(move)
 
     def test_handle_action_pass_all_players_with_letters(self):
         """Test handle_action when all players pass and letters remain in bag"""
@@ -444,7 +451,7 @@ class TestGrab(unittest.TestCase):
         game.state = initial_state
         
         # Player 1 passes - this should trigger letter draw
-        result_state = game.handle_action(1, 0)
+        result_state, move = game.handle_action(1, 0)
         
         # Verify letter was drawn (bag decreased, pool increased)
         self.assertEqual(np.sum(result_state.bag), 1)  # One less in bag
@@ -453,6 +460,9 @@ class TestGrab(unittest.TestCase):
         self.assertEqual(result_state.passed, [False, False])
         # Verify scores preserved
         self.assertEqual(result_state.scores, [5, 10])
+        # Verify DrawLetters move was returned
+        self.assertIsInstance(move, DrawLetters)
+        self.assertEqual(len(move.letters), 1)
 
     def test_handle_action_pass_all_players_no_letters(self):
         """Test handle_action when all players pass and no letters remain"""
@@ -471,12 +481,14 @@ class TestGrab(unittest.TestCase):
         game.state = initial_state
         
         # Player 1 passes - this should end the game
-        result_state = game.handle_action(1, 0)
+        result_state, move = game.handle_action(1, 0)
         
         # Verify game ended with bonus scoring
         expected_bonus = 5  # "cat" = c(3) + a(1) + t(1) = 5
         self.assertEqual(result_state.scores[0], 10 + expected_bonus)  # Original + bonus
         self.assertEqual(result_state.scores[1], 5)  # No words, no bonus
+        # Verify no move returned for game end
+        self.assertIsNone(move)
 
     def test_handle_action_invalid_player(self):
         """Test handle_action with invalid player number"""
@@ -494,12 +506,12 @@ class TestGrab(unittest.TestCase):
         
         # Test negative player
         with self.assertRaises(ValueError) as context:
-            game.handle_action(-1, 0)
+            result_state, move = game.handle_action(-1, 0)
         self.assertIn("Player -1 is out of range", str(context.exception))
         
         # Test player too high
         with self.assertRaises(ValueError) as context:
-            game.handle_action(2, 0)
+            result_state, move = game.handle_action(2, 0)
         self.assertIn("Player 2 is out of range", str(context.exception))
 
     def test_handle_action_invalid_action(self):
@@ -518,12 +530,12 @@ class TestGrab(unittest.TestCase):
         
         # Test invalid integer action
         with self.assertRaises(ValueError) as context:
-            game.handle_action(0, 1)
+            result_state, move = game.handle_action(0, 1)
         self.assertIn("Invalid action: 1", str(context.exception))
         
         # Test invalid type
         with self.assertRaises(ValueError) as context:
-            game.handle_action(0, [])
+            result_state, move = game.handle_action(0, [])
         self.assertIn("Invalid action", str(context.exception))
 
     def test_handle_action_complex_scenario(self):
@@ -543,7 +555,7 @@ class TestGrab(unittest.TestCase):
         game.state = initial_state
         
         # Player 1 makes "cats" using "cat" + "s"
-        result_state = game.handle_action(1, "cats")
+        result_state, move = game.handle_action(1, "cats")
         
         # Verify the move was successful - should have created "cats" 
         # The exact number of words depends on how construct_move chose to build "cats"
@@ -553,6 +565,10 @@ class TestGrab(unittest.TestCase):
         self.assertEqual(result_state.scores[1], 8 + 6)
         # Verify passed status preserved
         self.assertEqual(result_state.passed, [True, False, True])
+        # Verify move object was returned
+        self.assertIsInstance(move, MakeWord)
+        self.assertEqual(move.player, 1)
+        self.assertEqual(move.word, "cats")
 
     def test_word_list_validation_valid_word(self):
         """Test that valid words from word list are accepted"""
