@@ -1,4 +1,4 @@
-from typing import Set
+from typing import Set, Union
 import os
 import numpy as np
 from .grab_state import State, Word, MakeWord, DrawLetters
@@ -135,6 +135,91 @@ class Grab(object):
         if not isinstance(new_state, State):
             raise TypeError("state must be a State instance")
         self._state = new_state
+
+    def handle_action(self, player: int, action: Union[str, int]) -> State:
+        """Handle an action by a player in the current state.
+
+        An action is either playing a new word or passing.
+
+        Parameters
+        ----------
+        player: int
+            The id of the player doing this action.
+        action: str or int
+            This is either a string representing a word, or the integer 0 representing
+            passing. In the former case, attempt to make the word using construct_word.
+            If it's 0, update the state to mark that player as passed.  If all players
+            have passed, then either draw a new letter (if there are any left in the
+            bag) or end the game (if not).
+
+        Returns
+        -------
+        new_state: State
+            The state after making this move
+
+        Raises
+        ------
+        ValueError
+            If player is out of range or action is invalid
+        DisallowedWordException
+            If the word is not in the allowed word list
+        NoWordFoundException
+            If the word cannot be constructed with available letters
+
+        """
+        current_state = self._state
+        
+        # Validate player
+        if player < 0 or player >= current_state.num_players:
+            raise ValueError(f"Player {player} is out of range (0-{current_state.num_players-1})")
+        
+        # Handle word action (string)
+        if isinstance(action, str):
+            # Attempt to make the word using construct_move
+            move, new_state = self.construct_move(current_state, player, action)
+            # Update the internal state
+            self._state = new_state
+            return new_state
+        
+        # Handle pass action (integer 0)
+        elif action == 0:
+            # Create new state with player marked as passed
+            new_state = State(
+                num_players=current_state.num_players,
+                words_per_player=[words[:] for words in current_state.words_per_player],
+                pool=current_state.pool.copy(),
+                bag=current_state.bag.copy(),
+                scores=current_state.scores.copy(),
+                passed=current_state.passed.copy()
+            )
+            
+            # Mark this player as passed
+            new_state.passed[player] = True
+            
+            # Check if all players have passed
+            if all(new_state.passed):
+                # All players have passed - either draw letter or end game
+                total_letters_in_bag = np.sum(new_state.bag)
+                
+                if total_letters_in_bag > 0:
+                    # Draw a letter (this resets all passed status to False)
+                    draw_move, final_state = self.construct_draw_letters(new_state, 1)
+                    self._state = final_state
+                    return final_state
+                else:
+                    # No letters left - end the game
+                    final_state = self.end_game(new_state)
+                    self._state = final_state
+                    return final_state
+            else:
+                # Not all players have passed - just update state
+                self._state = new_state
+                return new_state
+        
+        # Invalid action
+        else:
+            raise ValueError(f"Invalid action: {action}. Action must be a string (word) or integer 0 (pass).")
+        
 
     def construct_move(self, state: State, player: int, word: str) -> tuple[MakeWord, State]:
         """Construct a Move that enables a player to make a particular word.
