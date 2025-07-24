@@ -44,11 +44,45 @@ def init_socketio_handlers(socketio):
                 return False
             
             # Store player connection info
+            username = payload['username']
             connected_players[request.sid] = {
                 'player_id': payload['player_id'],
-                'username': payload['username'],
-                'game_id': None  # Will be set when joining a game room
+                'username': username,
+                'game_id': None  # Will be set if player is in an active game
             }
+            
+            # Check if player is in an active game and auto-join
+            try:
+                game_id = game_server.get_player_game(username)
+                if game_id:
+                    # Check if game is active
+                    game_data = game_server.get_game_metadata(game_id)
+                    if game_data['status'] == 'active':
+                        # Join the game room
+                        join_room(game_id)
+                        connected_players[request.sid]['game_id'] = game_id
+                        
+                        # Add to game room tracking
+                        if game_id not in game_rooms:
+                            game_rooms[game_id] = set()
+                        game_rooms[game_id].add(request.sid)
+                        
+                        # Send initial game state
+                        game_state = _get_game_state(game_id)
+                        emit('connected', {
+                            'message': 'Successfully connected',
+                            'game_state': game_state
+                        })
+                        
+                        # Notify other players of reconnection
+                        socketio.emit('player_reconnected', 
+                                     {'player': username},
+                                     room=game_id, 
+                                     include_self=False)
+                        return
+            except KeyError:
+                # Player doesn't exist in game server - continue with normal connection
+                pass
             
             emit('connected', {'message': 'Successfully connected'})
             
@@ -75,63 +109,6 @@ def init_socketio_handlers(socketio):
             
             # Remove from connected players
             del connected_players[request.sid]
-    
-    @socketio.on('join_game')
-    def handle_join_game(data):
-        """Handle joining a game room for WebSocket communication."""
-        if request.sid not in connected_players:
-            emit('error', {'message': 'Not authenticated'})
-            return
-        
-        player_info = connected_players[request.sid]
-        game_id = data.get('game_id')
-        
-        if not game_id:
-            emit('error', {'message': 'Game ID required'})
-            return
-        
-        # Validate game exists and player is in it
-        try:
-            game_data = game_server.get_game_metadata(game_id)
-        except KeyError:
-            emit('error', {'message': 'Game not found'})
-            return
-        
-        username = player_info['username']
-        
-        # Check if player is in this game
-        try:
-            state, players = game_server.get_game_info(game_id)
-            if username not in players:
-                emit('error', {'message': 'Player not in this game'})
-                return
-        except KeyError:
-            emit('error', {'message': 'Game not found'})
-            return
-        
-        # Check if game is active
-        if game_data['status'] != 'active':
-            emit('error', {'message': 'Game is not active'})
-            return
-        
-        # Join the game room
-        join_room(game_id)
-        player_info['game_id'] = game_id
-        
-        # Add to game room tracking
-        if game_id not in game_rooms:
-            game_rooms[game_id] = set()
-        game_rooms[game_id].add(request.sid)
-        
-        # Send initial game state
-        game_state = _get_game_state(game_id)
-        emit('game_state', {'data': game_state})
-        
-        # Notify other players
-        socketio.emit('player_reconnected', 
-                     {'player': username},
-                     room=game_id, 
-                     include_self=False)
     
     @socketio.on('move')
     def handle_move(data):

@@ -552,8 +552,8 @@ def socketio_client(app):
 class TestWebSocketAPI:
     """Test WebSocket API functionality."""
     
-    def test_websocket_connection_and_join_game(self, client, auth_headers, app):
-        """Test WebSocket connection and joining a game."""
+    def test_websocket_connection_and_auto_join_game(self, client, auth_headers, app):
+        """Test WebSocket connection and automatic joining of active game."""
         # Create and start a game
         create_response = client.post('/api/games', json={}, headers=auth_headers)
         game_id = json.loads(create_response.data)['data']['game_id']
@@ -567,25 +567,23 @@ class TestWebSocketAPI:
         # Create Socket.IO test client
         sio_client = app.socketio.test_client(app)
         
-        # Connect with authentication
+        # Connect with authentication - should auto-join active game
         sio_client.connect(auth={'token': token})
-        
-        # Join the game room
-        sio_client.emit('join_game', {'game_id': game_id})
         
         # Wait for and verify response
         received = sio_client.get_received()
         assert len(received) > 0
         
-        # Find the game_state message
-        game_state_msg = None
+        # Find the connected message with game state
+        connected_msg = None
         for msg in received:
-            if msg['name'] == 'game_state':
-                game_state_msg = msg
+            if msg['name'] == 'connected':
+                connected_msg = msg
                 break
         
-        assert game_state_msg is not None
-        game_state = game_state_msg['args'][0]['data']
+        assert connected_msg is not None
+        assert 'game_state' in connected_msg['args'][0]
+        game_state = connected_msg['args'][0]['game_state']
         assert game_state['game_id'] == game_id
         assert 'testuser' in game_state['players']
     
@@ -604,9 +602,8 @@ class TestWebSocketAPI:
         # Create Socket.IO test client
         sio_client = app.socketio.test_client(app)
         
-        # Connect and join game
+        # Connect (auto-joins active game)
         sio_client.connect(auth={'token': token})
-        sio_client.emit('join_game', {'game_id': game_id})
         
         # Clear received messages
         sio_client.get_received()
@@ -650,9 +647,8 @@ class TestWebSocketAPI:
         # Create Socket.IO test client
         sio_client = app.socketio.test_client(app)
         
-        # Connect and join game
+        # Connect (auto-joins active game)
         sio_client.connect(auth={'token': token})
-        sio_client.emit('join_game', {'game_id': game_id})
         
         # Clear received messages
         sio_client.get_received()
@@ -690,9 +686,8 @@ class TestWebSocketAPI:
         # Create Socket.IO test client
         sio_client = app.socketio.test_client(app)
         
-        # Connect and join game
+        # Connect (auto-joins active game)
         sio_client.connect(auth={'token': token})
-        sio_client.emit('join_game', {'game_id': game_id})
         
         # Clear received messages
         sio_client.get_received()
@@ -731,7 +726,7 @@ class TestWebSocketAPI:
         if is_connected:
             # Try to emit and expect error about authentication
             try:
-                sio_client.emit('join_game', {'game_id': 'dummy'})
+                sio_client.emit('move', {'data': 'test'})
                 received = sio_client.get_received()
                 # Look for authentication error
                 error_found = any(

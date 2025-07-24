@@ -291,8 +291,166 @@ sio.connect('http://localhost:5000', auth={'token': 'jwt-session-token-here'})
 - Connection will be rejected if token is invalid or missing
 
 **Connection Events:**
-- `connected` - Emitted when authentication succeeds
+- `connected` - Emitted when authentication succeeds (includes initial game state if player is in an active game)
 - `error` - Emitted for authentication or connection errors
+
+**Automatic Game Room Joining:**
+- Upon successful authentication, if the player is in an active game, they are automatically joined to that game's Socket.IO room
+- No separate `join_game` event is required
+- Players immediately begin receiving `game_state` updates for their active game
+
+---
+
+#### **Client Integration Patterns**
+
+**Complete JavaScript Client Example:**
+```javascript
+class GrabGameClient {
+  constructor(serverUrl, sessionToken) {
+    this.socket = io(serverUrl, {
+      auth: { token: sessionToken },
+      autoConnect: false
+    });
+    
+    this.setupEventHandlers();
+  }
+  
+  setupEventHandlers() {
+    this.socket.on('connected', (data) => {
+      console.log('Connected to server:', data.message);
+    });
+    
+    this.socket.on('game_state', (data) => {
+      this.updateGameUI(data.data);
+    });
+    
+    this.socket.on('move_result', (data) => {
+      if (data.success) {
+        console.log('Move successful');
+        this.updateGameUI(data.game_state);
+      } else {
+        this.showError(data.error);
+      }
+    });
+    
+    this.socket.on('player_disconnected', (data) => {
+      this.showPlayerStatus(data.player, 'disconnected');
+    });
+    
+    this.socket.on('player_reconnected', (data) => {
+      this.showPlayerStatus(data.player, 'reconnected');
+    });
+    
+    this.socket.on('error', (data) => {
+      this.showError(data.message);
+    });
+    
+    this.socket.on('disconnect', (reason) => {
+      console.log('Disconnected:', reason);
+      this.showConnectionStatus('disconnected');
+    });
+  }
+  
+  connect() {
+    this.socket.connect();
+  }
+  
+  makeMove(word) {
+    this.socket.emit('move', { data: word });
+  }
+  
+  passMove() {
+    this.socket.emit('player_action', { data: 'ready_for_next_turn' });
+  }
+  
+  getGameStatus() {
+    this.socket.emit('get_status');
+  }
+  
+  updateGameUI(gameState) {
+    // Update your UI with the new game state
+    document.getElementById('pool-letters').textContent = 
+      this.formatLetterPool(gameState.state.pool);
+    
+    // Update player scores
+    Object.entries(gameState.players).forEach(([username, playerData]) => {
+      const scoreElement = document.getElementById(`score-${username}`);
+      if (scoreElement) {
+        scoreElement.textContent = playerData.score;
+      }
+    });
+    
+    // Update player words
+    const state = JSON.parse(gameState.state);
+    state.words_per_player.forEach((words, playerIndex) => {
+      const wordsElement = document.getElementById(`words-player-${playerIndex}`);
+      if (wordsElement) {
+        wordsElement.textContent = words.join(', ');
+      }
+    });
+  }
+  
+  formatLetterPool(poolArray) {
+    // Convert [1, 0, 2, 0, 1, ...] to "a c c e"
+    const letters = [];
+    poolArray.forEach((count, index) => {
+      const letter = String.fromCharCode(97 + index); // 'a' + index
+      for (let i = 0; i < count; i++) {
+        letters.push(letter);
+      }
+    });
+    return letters.join(' ');
+  }
+  
+  showError(message) {
+    const errorDiv = document.getElementById('error-message');
+    errorDiv.textContent = message;
+    errorDiv.style.display = 'block';
+    
+    // Hide error after 5 seconds
+    setTimeout(() => {
+      errorDiv.style.display = 'none';
+    }, 5000);
+  }
+}
+
+// Usage
+const sessionToken = localStorage.getItem('session_token');
+const client = new GrabGameClient('http://localhost:5000', sessionToken);
+
+client.connect();
+// Player is automatically joined to their active game's room upon connection
+
+// Handle form submission for word input
+document.getElementById('word-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const wordInput = document.getElementById('word-input');
+  const word = wordInput.value.trim().toLowerCase();
+  
+  if (word) {
+    client.makeMove(word);
+    wordInput.value = '';
+  }
+});
+
+// Handle pass button
+document.getElementById('pass-button').addEventListener('click', () => {
+  client.passMove();
+});
+```
+
+**Connection Management Best Practices:**
+- Always handle reconnection scenarios gracefully
+- Store game state locally to survive disconnections
+- Show clear UI feedback for connection status
+- Implement exponential backoff for manual reconnection attempts
+- Handle authentication token expiration
+
+**Error Handling Patterns:**
+- Display user-friendly error messages for invalid moves
+- Distinguish between temporary (network) and permanent (game logic) errors
+- Provide recovery suggestions where appropriate
+- Log detailed errors for debugging while showing simple messages to users
 
 ---
 
@@ -300,26 +458,6 @@ sio.connect('http://localhost:5000', auth={'token': 'jwt-session-token-here'})
 
 ### **Client → Server Events**
 
-#### **`join_game`**
-Join a game room to receive real-time updates.
-
-**Data:**
-```json
-{
-  "game_id": "ABC123"
-}
-```
-
-**Responses:**
-- `game_state` - Current game state (on success)
-- `error` - Error message if join fails
-
-**Requirements:**
-- Player must be authenticated
-- Player must have already joined the game via HTTP API
-- Game must be in "active" status
-
----
 
 #### **`move`**
 Send a move to the game.
@@ -327,9 +465,18 @@ Send a move to the game.
 **Data:**
 ```json
 {
-  "data": "move-string-specific-to-game-type"
+  "data": "word-to-make"
 }
 ```
+
+**Move Format:**
+- **Word Move**: Send a string containing the word you want to make (e.g., `"hello"`)
+
+**Word Making Requirements:**
+- Word must be in the allowed dictionary (TWL06 or SOWPODS)
+- Word must be constructible from available letters in the pool and existing player words
+- Only one existing word can be used per move (from any player)
+- Used words are removed from their original owner and the new word goes to the current player
 
 **Responses:**
 - `move_result` - Success/failure with updated game state
@@ -343,6 +490,11 @@ Send a move to the game.
   "game_state": { ... }  // Only on success
 }
 ```
+
+**Common Move Errors:**
+- `"Word 'xyz' is not in the allowed word list"`
+- `"Cannot construct word 'xyz' with available letters and words"`
+- `"Player X is out of range (0-Y)"`
 
 ---
 
@@ -386,26 +538,56 @@ Current game state broadcast to all players.
 {
   "data": {
     "game_id": "ABC123",
-    "game_type": "dummy",
-    "status": "active",
+    "game_type": "grab|dummy",
+    "status": "waiting|active|finished",
     "current_turn": 1,
     "turn_time_remaining": null,
     "players": {
       "username1": {
         "connected": true,
-        "score": 0,
+        "score": 15,
         "ready_for_next_turn": false
       },
       "username2": {
         "connected": false,
-        "score": 5,
+        "score": 23,
         "ready_for_next_turn": true
       }
     },
-    "state": "{\"game-specific-state-json\"}"
+    "state": "{\"grab-game-state-json\"}"
   }
 }
 ```
+
+**Game State Details:**
+
+**For Grab Games (`game_type`: `"grab"`):**
+The `state` field contains JSON with the following structure:
+```json
+{
+  "num_players": 2,
+  "pool": [1, 0, 2, 0, 1, 0, ...],  // 26-element array of letter counts (a-z)
+  "bag": [8, 2, 0, 4, 11, 2, ...],   // 26-element array of remaining letters
+  "words_per_player": [
+    ["hello", "cat"],   // Player 0's words
+    ["world", "dog"]    // Player 1's words
+  ],
+  "scores": [15, 23],     // Current scores for each player
+  "passed": [false, true] // Whether each player has passed since last letter draw
+}
+```
+
+**Letter Pool/Bag Format:**
+- Arrays of 26 integers representing letter counts where index 0 = 'a', index 1 = 'b', etc.
+- Pool contains letters currently available for making words
+- Bag contains letters not yet drawn from the tile bag
+
+**Player Words:**
+- Each player has a list of word strings they currently own
+- Words can be taken by other players to form new words
+
+**For Dummy Games (`game_type`: `"dummy"`):**
+The `state` field contains simpler JSON for testing purposes.
 
 ---
 
@@ -478,6 +660,22 @@ Error messages for various failures.
 - `"Game is not active"`
 - `"Not in a game"`
 
+**Move-Specific Errors:**
+- `"Word 'xyz' is not in the allowed word list"`
+- `"Cannot construct word 'xyz' with available letters and words"`
+- `"Player X is out of range (0-Y)"`
+- `"Word contains invalid character: 'X'. Only letters 'a' to 'z' are allowed"`
+
+**Connection Errors:**
+- `"Player disconnected unexpectedly"`
+- `"Connection timeout"`
+- `"Maximum reconnection attempts exceeded"`
+
+**Game State Errors:**
+- `"Game has ended"`
+- `"Not your turn"`
+- `"All players have already passed this turn"`
+
 ---
 
 ## Implementation Notes
@@ -508,3 +706,70 @@ Error messages for various failures.
 - Built-in ping/pong for connection health monitoring
 - Automatic cleanup of connections when games end or players leave
 - Players are automatically removed from game rooms on disconnection
+
+### Turn Timers and Game Progression
+
+**Turn Timer Implementation:**
+- Games can be configured with `time_limit_seconds` (default: 300 seconds/5 minutes per turn)
+- Timer starts when a new letter is drawn and all players' `passed` status is reset to false
+- When timer expires, game automatically draws the next letter (if available) or ends the game
+- `turn_time_remaining` field in `game_state` shows seconds remaining (null if no active timer)
+
+**Game Progression Events:**
+
+#### **`turn_starting`**
+Broadcast when a new turn begins (new letter drawn).
+
+**Data:**
+```json
+{
+  "turn_number": 2,
+  "letters_drawn": ["e"],
+  "time_limit": 300,
+  "letters_remaining_in_bag": 85
+}
+```
+
+#### **`turn_ending`**
+Broadcast when all players have passed or time limit is reached.
+
+**Data:**
+```json
+{
+  "turn_number": 1,
+  "reason": "all_players_passed|time_expired",
+  "final_moves_count": 3
+}
+```
+
+#### **`game_ending`**
+Broadcast when the game is about to end (no letters left in bag).
+
+**Data:**
+```json
+{
+  "reason": "bag_empty|creator_stopped",
+  "final_scores": {
+    "player1": 45,
+    "player2": 38
+  },
+  "winner": "player1"
+}
+```
+
+**Turn Timer Behavior:**
+- Timer is paused when no players are connected
+- Timer resumes when at least one player reconnects
+- If all players disconnect for more than 10 minutes, game is automatically ended
+- Players receive `game_state` updates every 30 seconds with updated `turn_time_remaining`
+
+**Automatic Game Progression:**
+1. When all players pass → Draw next letter (if available) or end game
+2. When turn timer expires → Same as all players passing (not implemented ATM)
+3. When bag is empty → Game ends, bonus scores calculated
+4. When game creator stops game → Game ends immediately
+
+**Game End Scoring:**
+- Each player receives bonus points equal to the total value of words they still own
+- Final `game_state` event includes updated scores with bonuses applied
+- Game status changes to "finished"

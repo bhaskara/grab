@@ -101,6 +101,29 @@ class GameServer(object):
         self.games[game_id]['players'].append(player)
         self.player_to_game[player] = game_id
 
+    def get_player_game(self, player: str) -> str:
+        """Get the game ID that a player is currently in.
+        
+        Parameters
+        ----------
+        player : str
+            The player name to look up
+            
+        Returns
+        -------
+        str
+            The game ID the player is in, or None if not in any game
+            
+        Raises
+        ------
+        KeyError
+            If player does not exist
+        """
+        if player not in self.players:
+            raise KeyError(f"Player '{player}' does not exist")
+        
+        return self.player_to_game.get(player)
+
     def remove_game(self, game_id : str):
         """Remove the given game from the state.
 

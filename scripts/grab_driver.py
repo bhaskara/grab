@@ -5,6 +5,7 @@ Interactive driver script for the Grab word game.
 This script allows playing Grab from the command line with multiple players.
 Commands:
 - "PLAYER_NUM WORD" - Player attempts to make a word (e.g., "1 cat")
+- "PLAYER_NUM" - Player passes
 - "draw" - Draw next letter from bag to pool
 - "end" - End the game and show final scores
 - "help" - Show this help message
