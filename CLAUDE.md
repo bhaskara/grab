@@ -29,4 +29,4 @@ This project is for learning, so please document things.  It doesn't have to be 
   
 In general, things should fail early and informatively.  For example, don't silently catch exceptions and return None within library functions.  Instead, pass those exceptions up unless they can be handled (but do document this behavior).
 
-Unit tests should always be run and validated to pass before making a commit.
+The full test suite (pytest in the repo root) should always be run and validated to pass before making a commit.
