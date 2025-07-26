@@ -149,8 +149,26 @@ def init_socketio_handlers(socketio):
                 emit('move_result', {'success': False, 'error': 'Game not started'})
                 return
             
-            # Make the move
-            game.send_move(username, move_data)
+            # Make the move - convert username to player index for Grab games
+            if hasattr(game, 'handle_action'):
+                # This is a Grab game - need to convert username to player index
+                try:
+                    state, players = game_server.get_game_info(game_id)
+                    if username not in players:
+                        emit('move_result', {'success': False, 'error': f'Player {username} not found in game'})
+                        return
+                    
+                    player_index = players.index(username)
+                    action = 0 if move_data == "" else move_data
+                    
+                    # Use handle_action for Grab games
+                    new_state, move = game.handle_action(player_index, action)
+                except Exception as e:
+                    emit('move_result', {'success': False, 'error': str(e)})
+                    return
+            else:
+                # This is a DummyGrab game - use send_move
+                game.send_move(username, move_data)
             
             # Get updated game state
             game_state = _get_game_state(game_id)
@@ -222,7 +240,20 @@ def init_socketio_handlers(socketio):
                     emit('error', {'message': 'Game not started'})
                     return
                 
-                game.send_move(username, '')
+                # Handle ready action - convert username to player index for Grab games
+                if hasattr(game, 'handle_action'):
+                    # This is a Grab game - need to convert username to player index
+                    state, players = game_server.get_game_info(game_id)
+                    if username not in players:
+                        emit('error', {'message': f'Player {username} not found in game'})
+                        return
+                    
+                    player_index = players.index(username)
+                    # Use handle_action for Grab games (0 = pass)
+                    new_state, move = game.handle_action(player_index, 0)
+                else:
+                    # This is a DummyGrab game - use send_move
+                    game.send_move(username, '')
                 
                 # Get updated game state
                 game_state = _get_game_state(game_id)
@@ -279,7 +310,7 @@ def _get_game_state(game_id):
         
         return {
             'game_id': game_id,
-            'game_type': 'dummy',  # TODO: Get from game meta
+            'game_type': game_data['game_type'],
             'status': game_data['status'],
             'current_turn': 1,  # TODO: Get from game state
             'turn_time_remaining': None,  # TODO: Implement time limits
