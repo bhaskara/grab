@@ -124,11 +124,13 @@ def create_game():
         return jsonify({'success': False, 'error': 'Invalid time_limit_seconds (must be >= 30)'}), 400
     
     # Create game in game server with metadata
+    game_type = current_app.config.get('GAME_TYPE', 'dummy')
     game_id = game_server.add_game(
         creator_id=request.current_user['player_id'],
         creator_username=request.current_user['username'],
         max_players=max_players,
-        time_limit_seconds=time_limit_seconds
+        time_limit_seconds=time_limit_seconds,
+        game_type=game_type
     )
     
     game_data = game_server.get_game_metadata(game_id)
@@ -276,6 +278,10 @@ def start_game(game_id):
     elif game_type == 'grab':
         from .grab_game import Grab
         game_object = Grab(num_players=len(players))
+        
+        # Draw 3 initial letters to start the game
+        draw_move, new_state = game_object.construct_draw_letters(game_object.state, 3)
+        game_object.state = new_state
     else:
         return jsonify({'success': False, 'error': f'Unsupported game type: {game_type}'}), 400
     
@@ -491,7 +497,7 @@ def _get_basic_game_state(game_id):
         
         return {
             'game_id': game_id,
-            'game_type': 'dummy',  # TODO: Get from game meta
+            'game_type': game_data['game_type'],
             'status': game_data['status'],
             'current_turn': 1,  # TODO: Get from game state
             'turn_time_remaining': None,  # TODO: Implement time limits
