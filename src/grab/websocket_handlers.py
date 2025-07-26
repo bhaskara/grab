@@ -278,7 +278,11 @@ def _get_game_state(game_id):
     try:
         state, players = game_server.get_game_info(game_id)
         
-        # Build players dict with connection info
+        # Get game object for score calculation
+        game_data = game_server.games[game_id]
+        game = game_data['game_object']
+        
+        # Build players dict with connection info and actual scores
         players_dict = {}
         for username in players:
             is_connected = any(
@@ -286,27 +290,42 @@ def _get_game_state(game_id):
                 for player_data in connected_players.values()
             )
             
+            # Calculate actual score from game state
+            actual_score = 0
+            if hasattr(game, 'state'):
+                player_index = players.index(username)
+                actual_score = int(game.state.scores[player_index])
+            
             players_dict[username] = {
                 'connected': is_connected,
-                'score': 0,  # TODO: Calculate from game state
+                'score': actual_score,
                 'ready_for_next_turn': False  # TODO: Track from game state
             }
         
         # Get game-specific state
-        game_state_json = "{}"
-        if game_id in game_server.games:
-            game_data = game_server.games[game_id]
-            if 'game_object' in game_data:
-                game = game_data['game_object']
-                if hasattr(game, 'get_state'):
-                    is_running, current_round, history = game.get_state()
-                    game_state_json = json.dumps({
-                        'is_running': is_running,
-                        'current_round': current_round,
-                        'history': history,
-                        'current_moves': getattr(game, 'current_round_moves', {}),
-                        'players_done': list(getattr(game, 'players_done_current_round', set()))
-                    })
+        if hasattr(game, 'get_state'):
+            # DummyGrab - use get_state method
+            is_running, current_round, history = game.get_state()
+            game_state_json = json.dumps({
+                'is_running': is_running,
+                'current_round': current_round,
+                'history': history,
+                'current_moves': getattr(game, 'current_round_moves', {}),
+                'players_done': list(getattr(game, 'players_done_current_round', set()))
+            })
+        elif hasattr(game, 'state'):
+            # Grab game - use state attribute
+            state = game.state
+            game_state_json = json.dumps({
+                'num_players': int(state.num_players),
+                'pool': state.pool.tolist(),
+                'bag': state.bag.tolist(),
+                'words_per_player': [[word.word for word in words] for words in state.words_per_player],
+                'scores': [int(score) for score in state.scores],
+                'passed': [bool(passed) for passed in state.passed]
+            })
+        else:
+            raise ValueError(f"Game object of type {type(game).__name__} has neither 'get_state' method nor 'state' attribute")
         
         return {
             'game_id': game_id,
