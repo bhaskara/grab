@@ -282,7 +282,7 @@ class GrabSocketIOClient:
     def enter_game_mode(self, game_id: str):
         """Enter interactive game mode."""
         print(f"\n🎮 Entering game mode for {game_id}")
-        print("Commands: <word> to make a move, !ready/!r for next turn, !status/!s for state, !quit/!q to leave")
+        print("Commands: <word> to make a move, !ready/!r for next turn, !status/!s for state, !start to start game, !quit/!q to leave")
         
         self.current_game_id = game_id
         self.game_active = True
@@ -309,9 +309,14 @@ class GrabSocketIOClient:
                     elif action in ['ready', 'r']:
                         self.sio.emit('player_action', {'data': 'ready_for_next_turn'})
                         print("✓ Marked as ready for next turn")
+                    elif action == 'start':
+                        if self.start_game(self.current_game_id):
+                            print("✓ Game started!")
+                        else:
+                            print("✗ Failed to start game (you may not be the creator)")
                     else:
                         print(f"Unknown action: !{action}")
-                        print("Available actions: !ready/!r, !status/!s, !quit/!q")
+                        print("Available actions: !ready/!r, !status/!s, !start, !quit/!q")
                 else:
                     # Treat as a word move
                     self.sio.emit('move', {'data': command.lower()})

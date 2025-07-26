@@ -7,15 +7,20 @@ game management, and player-game associations as specified in doc/server-api.md.
 
 import jwt
 import uuid
+import json
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from flask import Blueprint, request, jsonify, current_app
+from flask_socketio import emit, join_room
 from .game_server import GameServer
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
 # Global game server instance
 game_server = GameServer()
+
+# Global socketio instance - will be set by app initialization
+socketio_instance = None
 
 # Active sessions: session_token -> player_data
 active_sessions = {}
@@ -278,6 +283,13 @@ def start_game(game_id):
     game_server.games[game_id]['state'] = 'running'
     game_server.games[game_id]['game_object'] = game_object
     
+    # Broadcast game state to all connected players in this game
+    if not socketio_instance:
+        return jsonify({'success': False, 'error': 'WebSocket server not initialized'}), 500
+    
+    game_state = _get_basic_game_state(game_id)
+    socketio_instance.emit('game_state', {'data': game_state}, room=game_id)
+    
     updated_game_data = game_server.get_game_metadata(game_id)
     return jsonify({
         'success': True,
@@ -364,6 +376,16 @@ def join_game(game_id):
             except KeyError:
                 pass
     
+    # Check that WebSocket server is available
+    if not socketio_instance:
+        return jsonify({'success': False, 'error': 'WebSocket server not initialized'}), 500
+    
+    # Check that player is connected via Socket.IO (required for real-time gameplay)
+    from .websocket_handlers import get_connected_player_socket_id, connected_players, game_rooms
+    socket_id = get_connected_player_socket_id(username)
+    if not socket_id:
+        return jsonify({'success': False, 'error': 'Player must be connected via WebSocket to join game'}), 400
+    
     # Add player to game server
     try:
         game_server.add_player_to_game(username, game_id)
@@ -374,6 +396,15 @@ def join_game(game_id):
             return jsonify({'success': False, 'error': 'Player is already in another active game'}), 409
         else:
             return jsonify({'success': False, 'error': str(e)}), 400
+    
+    # Auto-join Socket.IO room now that player is in the game
+    socketio_instance.server.enter_room(socket_id, game_id)
+    connected_players[socket_id]['game_id'] = game_id
+    
+    # Add to game room tracking
+    if game_id not in game_rooms:
+        game_rooms[game_id] = set()
+    game_rooms[game_id].add(socket_id)
     
     joined_at = datetime.now(timezone.utc).isoformat() + 'Z'
     
@@ -420,3 +451,53 @@ def connect_websocket(game_id):
             'socketio_namespace': '/'
         }
     }), 200
+
+
+def _get_basic_game_state(game_id):
+    """Get basic game state for broadcasting (without connection status)."""
+    try:
+        game_data = game_server.get_game_metadata(game_id)
+    except KeyError:
+        raise ValueError(f"Game {game_id} not found")
+    
+    # Get players from game server
+    try:
+        state, players = game_server.get_game_info(game_id)
+        
+        # Build players dict (without connection info since we don't have access to connected_players here)
+        players_dict = {}
+        for username in players:
+            players_dict[username] = {
+                'connected': True,  # Assume connected for broadcast purposes
+                'score': 0,  # TODO: Calculate from game state
+                'ready_for_next_turn': False  # TODO: Track from game state
+            }
+        
+        # Get game-specific state
+        game_state_json = "{}"
+        if game_id in game_server.games:
+            game_data_obj = game_server.games[game_id]
+            if 'game_object' in game_data_obj:
+                game = game_data_obj['game_object']
+                if hasattr(game, 'get_state'):
+                    is_running, current_round, history = game.get_state()
+                    game_state_json = json.dumps({
+                        'is_running': is_running,
+                        'current_round': current_round,
+                        'history': history,
+                        'current_moves': getattr(game, 'current_round_moves', {}),
+                        'players_done': list(getattr(game, 'players_done_current_round', set()))
+                    })
+        
+        return {
+            'game_id': game_id,
+            'game_type': 'dummy',  # TODO: Get from game meta
+            'status': game_data['status'],
+            'current_turn': 1,  # TODO: Get from game state
+            'turn_time_remaining': None,  # TODO: Implement time limits
+            'players': players_dict,
+            'state': game_state_json
+        }
+        
+    except KeyError:
+        raise ValueError(f"Game {game_id} not found in game server")

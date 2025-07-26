@@ -24,7 +24,7 @@ def create_app(config=None):
     app.config.update({
         'SECRET_KEY': 'dev-key-change-in-production',
         'DEBUG': True,
-        'GAME_TYPE': 'dummy'
+        'GAME_TYPE': 'grab'
     })
     
     if config:
@@ -39,6 +39,9 @@ def create_app(config=None):
     
     from . import api
     app.register_blueprint(api.api_bp)
+    
+    # Set the global socketio reference for API use
+    api.socketio_instance = socketio
     
     # Initialize WebSocket handlers
     from . import websocket_handlers

@@ -15,6 +15,13 @@ from .api import game_server, active_sessions, verify_session_token
 # Connected players: socket_id -> player_data
 connected_players = {}
 
+def get_connected_player_socket_id(username):
+    """Find the socket ID for a connected player by username."""
+    for socket_id, player_data in connected_players.items():
+        if player_data['username'] == username:
+            return socket_id
+    return None
+
 # Game rooms: game_id -> set of socket_ids
 game_rooms = {}
 
@@ -57,7 +64,7 @@ def init_socketio_handlers(socketio):
                 if game_id:
                     # Check if game is active
                     game_data = game_server.get_game_metadata(game_id)
-                    if game_data['status'] == 'active':
+                    if game_data['status'] in ['waiting', 'active']:
                         # Join the game room
                         join_room(game_id)
                         connected_players[request.sid]['game_id'] = game_id
