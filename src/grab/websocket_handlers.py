@@ -265,6 +265,41 @@ def init_socketio_handlers(socketio):
                 emit('error', {'message': f'Action failed: {str(e)}'})
         else:
             emit('error', {'message': f'Unknown action: {action}'})
+    
+    @socketio.on('join_game_room')
+    def handle_join_game_room(data):
+        """Handle request to join a game room (triggered by REST API)."""
+        if request.sid not in connected_players:
+            emit('error', {'message': 'Not authenticated'})
+            return
+        
+        player_info = connected_players[request.sid]
+        game_id = data.get('game_id')
+        
+        if not game_id:
+            emit('error', {'message': 'Game ID required'})
+            return
+        
+        try:
+            # Verify player is in this game
+            if player_info['game_id'] != game_id:
+                emit('error', {'message': 'Player not in this game'})
+                return
+            
+            # Join the game room
+            join_room(game_id)
+            
+            # Add to game room tracking
+            if game_id not in game_rooms:
+                game_rooms[game_id] = set()
+            game_rooms[game_id].add(request.sid)
+            
+            # Send current game state
+            game_state = _get_game_state(game_id)
+            emit('game_state', {'data': game_state})
+            
+        except Exception as e:
+            emit('error', {'message': f'Failed to join game room: {str(e)}'})
 
 
 def _get_game_state(game_id):

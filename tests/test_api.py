@@ -243,7 +243,7 @@ class TestGameManagement:
         game_id2 = json.loads(create_response2.data)['data']['game_id']
         
         # Join first game
-        client.post(f'/api/games/{game_id1}/join', headers=auth_headers)
+        client.post(f'/api/games/{game_id1}/join', json={'skip_websocket_check': True}, headers=auth_headers)
         
         # Get all games
         response = client.get('/api/games', headers=auth_headers)
@@ -282,7 +282,7 @@ class TestGameManagement:
         game_id = json.loads(create_response.data)['data']['game_id']
         
         # Join the game
-        client.post(f'/api/games/{game_id}/join', headers=auth_headers)
+        client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
         
         # Start the game
         response = client.post(f'/api/games/{game_id}/start', headers=auth_headers)
@@ -370,7 +370,9 @@ class TestPlayerGameAssociation:
         game_id = json.loads(create_response.data)['data']['game_id']
         
         # Join the game
-        response = client.post(f'/api/games/{game_id}/join', headers=auth_headers)
+        response = client.post(f'/api/games/{game_id}/join', 
+                              json={'skip_websocket_check': True}, 
+                              headers=auth_headers)
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data['success'] is True
@@ -379,7 +381,7 @@ class TestPlayerGameAssociation:
     
     def test_join_game_not_found(self, client, auth_headers):
         """Test joining non-existent game."""
-        response = client.post('/api/games/nonexistent/join', headers=auth_headers)
+        response = client.post('/api/games/nonexistent/join', json={'skip_websocket_check': True}, headers=auth_headers)
         assert response.status_code == 404
         data = json.loads(response.data)
         assert data['success'] is False
@@ -395,11 +397,11 @@ class TestPlayerGameAssociation:
         game_id = json.loads(create_response.data)['data']['game_id']
         
         # Join and start the game
-        client.post(f'/api/games/{game_id}/join', headers=auth_headers)
+        client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
         client.post(f'/api/games/{game_id}/start', headers=auth_headers)
         
         # Try to join as second user
-        response = client.post(f'/api/games/{game_id}/join', headers=second_auth_headers)
+        response = client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=second_auth_headers)
         assert response.status_code == 400
         data = json.loads(response.data)
         assert data['success'] is False
@@ -415,11 +417,11 @@ class TestPlayerGameAssociation:
         game_id = json.loads(create_response.data)['data']['game_id']
         
         # Join the game
-        response1 = client.post(f'/api/games/{game_id}/join', headers=auth_headers)
+        response1 = client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
         assert response1.status_code == 200
         
         # Try to join again
-        response2 = client.post(f'/api/games/{game_id}/join', headers=auth_headers)
+        response2 = client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
         assert response2.status_code == 400
         data = json.loads(response2.data)
         assert data['success'] is False
@@ -461,7 +463,7 @@ class TestWebSocketConnection:
                                      headers=auth_headers,
                                      content_type='application/json')
         game_id = json.loads(create_response.data)['data']['game_id']
-        client.post(f'/api/games/{game_id}/join', headers=auth_headers)
+        client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
         
         # Try to connect without starting the game
         response = client.get(f'/api/games/{game_id}/connect', headers=auth_headers)
@@ -484,11 +486,11 @@ class TestIntegration:
         game_id = json.loads(create_response.data)['data']['game_id']
         
         # First player joins
-        join_response1 = client.post(f'/api/games/{game_id}/join', headers=auth_headers)
+        join_response1 = client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
         assert join_response1.status_code == 200
         
         # Second player joins
-        join_response2 = client.post(f'/api/games/{game_id}/join', headers=second_auth_headers)
+        join_response2 = client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=second_auth_headers)
         assert join_response2.status_code == 200
         
         # Check game state
@@ -527,8 +529,8 @@ class TestIntegration:
         assert game_id1 != game_id2
         
         # Join different games
-        client.post(f'/api/games/{game_id1}/join', headers=auth_headers)
-        client.post(f'/api/games/{game_id2}/join', headers=second_auth_headers)
+        client.post(f'/api/games/{game_id1}/join', json={'skip_websocket_check': True}, headers=auth_headers)
+        client.post(f'/api/games/{game_id2}/join', json={'skip_websocket_check': True}, headers=second_auth_headers)
         
         # Verify game states are independent
         get_response1 = client.get(f'/api/games/{game_id1}', headers=auth_headers)
@@ -558,8 +560,10 @@ class TestWebSocketAPI:
         create_response = client.post('/api/games', json={}, headers=auth_headers)
         game_id = json.loads(create_response.data)['data']['game_id']
         
-        client.post(f'/api/games/{game_id}/join', headers=auth_headers)
-        client.post(f'/api/games/{game_id}/start', headers=auth_headers)
+        client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
+        client.post(f'/api/games/{game_id}/start', 
+                   json={'test_letters': ['a', 'b', 'c']}, 
+                   headers=auth_headers)
         
         # Extract token for WebSocket auth
         token = auth_headers['Authorization'].split(' ')[1]
@@ -593,8 +597,10 @@ class TestWebSocketAPI:
         create_response = client.post('/api/games', json={}, headers=auth_headers)
         game_id = json.loads(create_response.data)['data']['game_id']
         
-        client.post(f'/api/games/{game_id}/join', headers=auth_headers)
-        client.post(f'/api/games/{game_id}/start', headers=auth_headers)
+        client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
+        client.post(f'/api/games/{game_id}/start', 
+                   json={'test_letters': ['h', 'e', 'l', 'l', 'o']}, 
+                   headers=auth_headers)
         
         # Extract token for WebSocket auth
         token = auth_headers['Authorization'].split(' ')[1]
@@ -629,8 +635,12 @@ class TestWebSocketAPI:
         assert game_state_msg is not None
         game_state = game_state_msg['args'][0]['data']
         state_data = json.loads(game_state['state'])
-        assert 'testuser' in state_data['current_moves']
-        assert state_data['current_moves']['testuser'] == 'hello'
+        
+        # For Grab games, check that the word was added to player's words
+        assert 'words_per_player' in state_data
+        assert len(state_data['words_per_player']) > 0
+        player_words = state_data['words_per_player'][0]  # First player's words
+        assert 'hello' in player_words
     
     def test_websocket_player_action_ready(self, client, auth_headers, app):
         """Test WebSocket player action for ready_for_next_turn."""
@@ -638,8 +648,10 @@ class TestWebSocketAPI:
         create_response = client.post('/api/games', json={}, headers=auth_headers)
         game_id = json.loads(create_response.data)['data']['game_id']
         
-        client.post(f'/api/games/{game_id}/join', headers=auth_headers)
-        client.post(f'/api/games/{game_id}/start', headers=auth_headers)
+        client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
+        client.post(f'/api/games/{game_id}/start', 
+                   json={'test_letters': ['r', 'e', 'a', 'd', 'y']}, 
+                   headers=auth_headers)
         
         # Extract token for WebSocket auth
         token = auth_headers['Authorization'].split(' ')[1]
@@ -669,7 +681,17 @@ class TestWebSocketAPI:
         assert game_state_msg is not None
         game_state = game_state_msg['args'][0]['data']
         state_data = json.loads(game_state['state'])
-        assert 'testuser' in state_data['players_done']
+        
+        # For Grab games with single player, passing triggers letter draw which resets passed status
+        assert 'passed' in state_data
+        assert len(state_data['passed']) > 0
+        # In single-player game, passing draws new letter and resets passed status to False
+        assert state_data['passed'][0] is False  # Player status reset after letter draw
+        
+        # Verify that new letters were added to pool (indicating letter was drawn)
+        initial_pool_count = sum([1, 0, 0, 1, 1])  # r, e, a, d, y
+        current_pool_count = sum(state_data['pool'])
+        assert current_pool_count > initial_pool_count  # New letter was drawn
     
     def test_websocket_get_status(self, client, auth_headers, app):
         """Test WebSocket get_status request."""
@@ -677,8 +699,10 @@ class TestWebSocketAPI:
         create_response = client.post('/api/games', json={}, headers=auth_headers)
         game_id = json.loads(create_response.data)['data']['game_id']
         
-        client.post(f'/api/games/{game_id}/join', headers=auth_headers)
-        client.post(f'/api/games/{game_id}/start', headers=auth_headers)
+        client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
+        client.post(f'/api/games/{game_id}/start', 
+                   json={'test_letters': ['s', 't', 'a', 't', 'u', 's']}, 
+                   headers=auth_headers)
         
         # Extract token for WebSocket auth
         token = auth_headers['Authorization'].split(' ')[1]

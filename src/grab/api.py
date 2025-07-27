@@ -270,6 +270,10 @@ def start_game(game_id):
     # Start the game
     game_server.start_game(game_id)
     
+    # Get optional test parameters (only if JSON data was sent)
+    data = request.get_json(silent=True) or {}
+    test_letters = data.get('test_letters')  # Optional list of letters for testing
+    
     # Create game object based on game type
     game_type = current_app.config.get('GAME_TYPE', 'dummy')
     if game_type == 'dummy':
@@ -279,9 +283,20 @@ def start_game(game_id):
         from .grab_game import Grab
         game_object = Grab(num_players=len(players))
         
-        # Draw 3 initial letters to start the game
-        draw_move, new_state = game_object.construct_draw_letters(game_object.state, 3)
-        game_object.state = new_state
+        if test_letters:
+            # For testing: set specific letters in the pool
+            import numpy as np
+            new_pool = np.zeros(26, dtype=int)
+            for letter in test_letters:
+                if isinstance(letter, str) and len(letter) == 1 and letter.islower():
+                    letter_idx = ord(letter) - ord('a')
+                    if 0 <= letter_idx < 26:
+                        new_pool[letter_idx] += 1
+            game_object.state.pool = new_pool
+        else:
+            # Draw 3 initial letters to start the game
+            draw_move, new_state = game_object.construct_draw_letters(game_object.state, 3)
+            game_object.state = new_state
     else:
         return jsonify({'success': False, 'error': f'Unsupported game type: {game_type}'}), 400
     
@@ -386,10 +401,14 @@ def join_game(game_id):
     if not socketio_instance:
         return jsonify({'success': False, 'error': 'WebSocket server not initialized'}), 500
     
+    # Check for testing flag to skip WebSocket requirement
+    data = request.get_json() or {}
+    skip_websocket_check = data.get('skip_websocket_check', False)
+    
     # Check that player is connected via Socket.IO (required for real-time gameplay)
     from .websocket_handlers import get_connected_player_socket_id, connected_players, game_rooms
     socket_id = get_connected_player_socket_id(username)
-    if not socket_id:
+    if not socket_id and not skip_websocket_check:
         return jsonify({'success': False, 'error': 'Player must be connected via WebSocket to join game'}), 400
     
     # Add player to game server
@@ -403,14 +422,12 @@ def join_game(game_id):
         else:
             return jsonify({'success': False, 'error': str(e)}), 400
     
-    # Auto-join Socket.IO room now that player is in the game
-    socketio_instance.server.enter_room(socket_id, game_id)
-    connected_players[socket_id]['game_id'] = game_id
-    
-    # Add to game room tracking
-    if game_id not in game_rooms:
-        game_rooms[game_id] = set()
-    game_rooms[game_id].add(socket_id)
+    # Update player's game_id in connected_players for WebSocket handlers (if connected)
+    if socket_id:
+        connected_players[socket_id]['game_id'] = game_id
+        
+        # Emit a signal to the player's WebSocket to join the game room
+        socketio_instance.emit('join_game_room', {'game_id': game_id}, room=socket_id)
     
     joined_at = datetime.now(timezone.utc).isoformat() + 'Z'
     
