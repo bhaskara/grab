@@ -464,6 +464,9 @@ def test_full_integration():
             elif "Joined game 2" not in result_a['stdout']:
                 print("❌ TEST 2 FAILED: Client A failed to join own game")
                 success = False
+            elif "New letters drawn:" not in result_a['stdout']:
+                print("❌ TEST 2 FAILED: Client A didn't receive letters drawn event")
+                success = False
             
             # Check client B (charlie)
             if result_b['returncode'] != 0:
@@ -474,6 +477,9 @@ def test_full_integration():
                 success = False
             elif "Joined game 2" not in result_b['stdout']:
                 print("❌ TEST 2 FAILED: Client B failed to join game")
+                success = False
+            elif "New letters drawn:" not in result_b['stdout']:
+                print("❌ TEST 2 FAILED: Client B didn't receive letters drawn event")
                 success = False
             
             if success:

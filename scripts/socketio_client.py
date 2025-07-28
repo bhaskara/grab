@@ -75,6 +75,19 @@ class GrabSocketIOClient:
             player = data.get('player', 'Unknown')
             print(f"📱 {player} reconnected")
         
+        @self.sio.on('letters_drawn')
+        def on_letters_drawn(data):
+            event_data = data.get('data', {})
+            letters_drawn = event_data.get('letters_drawn', [])
+            letters_remaining = event_data.get('letters_remaining_in_bag', 0)
+            
+            print(f"\n🎯 New letters drawn: {', '.join(letters_drawn)}")
+            print(f"💼 Letters remaining in bag: {letters_remaining}")
+            
+            # Also display updated game state if provided
+            if 'game_state' in event_data:
+                self.display_game_state(event_data['game_state'])
+
         @self.sio.on('error')
         def on_error(data):
             print(f"❌ Server error: {data.get('message', 'Unknown error')}")

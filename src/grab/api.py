@@ -13,6 +13,7 @@ from functools import wraps
 from flask import Blueprint, request, jsonify, current_app
 from flask_socketio import emit, join_room
 from .game_server import GameServer
+from .grab_state import DrawLetters
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -297,6 +298,15 @@ def start_game(game_id):
             # Draw 3 initial letters to start the game
             draw_move, new_state = game_object.construct_draw_letters(game_object.state, 3)
             game_object.state = new_state
+            
+            # Emit letters_drawn event for initial letters
+            letters_remaining = int(sum(new_state.bag))
+            socketio_instance.emit('letters_drawn', {
+                'data': {
+                    'letters_drawn': draw_move.letters,
+                    'letters_remaining_in_bag': letters_remaining
+                }
+            }, room=game_id)
     else:
         return jsonify({'success': False, 'error': f'Unsupported game type: {game_type}'}), 400
     

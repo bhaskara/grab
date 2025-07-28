@@ -10,6 +10,7 @@ import jwt
 from flask import request, current_app
 from flask_socketio import emit, join_room, leave_room, disconnect
 from .api import game_server, active_sessions, verify_session_token
+from .grab_state import DrawLetters
 
 
 # Connected players: socket_id -> player_data
@@ -163,6 +164,17 @@ def init_socketio_handlers(socketio):
                     
                     # Use handle_action for Grab games
                     new_state, move = game.handle_action(player_index, action)
+                    
+                    # Check if letters were drawn and emit special event
+                    if isinstance(move, DrawLetters):
+                        letters_remaining = int(sum(new_state.bag))
+                        socketio.emit('letters_drawn', {
+                            'data': {
+                                'letters_drawn': move.letters,
+                                'letters_remaining_in_bag': letters_remaining
+                            }
+                        }, room=game_id)
+                        
                 except Exception as e:
                     emit('move_result', {'success': False, 'error': str(e)})
                     return
@@ -251,6 +263,16 @@ def init_socketio_handlers(socketio):
                     player_index = players.index(username)
                     # Use handle_action for Grab games (0 = pass)
                     new_state, move = game.handle_action(player_index, 0)
+                    
+                    # Check if letters were drawn and emit special event
+                    if isinstance(move, DrawLetters):
+                        letters_remaining = int(sum(new_state.bag))
+                        socketio.emit('letters_drawn', {
+                            'data': {
+                                'letters_drawn': move.letters,
+                                'letters_remaining_in_bag': letters_remaining
+                            }
+                        }, room=game_id)
                 else:
                     # This is a DummyGrab game - use send_move
                     game.send_move(username, '')

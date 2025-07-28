@@ -958,6 +958,48 @@ class TestServerClientFlow:
         player_0_words = updated_state_a['words_per_player'][0]  # clientA is player 0
         assert 'cad' in player_0_words, f"Word 'cad' should be in player 0's words but got: {player_0_words}"
         
+        # Test letters_drawn event by having both players pass (should trigger letter draw)
+        # Clear any pending messages
+        sio_client_a.get_received()
+        sio_client_b.get_received()
+        
+        # Both clients signal ready for next turn (pass)
+        sio_client_a.emit('player_action', {'data': 'ready_for_next_turn'})
+        sio_client_b.emit('player_action', {'data': 'ready_for_next_turn'})
+        
+        # Check if letters_drawn event was emitted
+        received_a_pass = sio_client_a.get_received()
+        received_b_pass = sio_client_b.get_received()
+        
+        # Look for letters_drawn event
+        letters_drawn_msg_a = None
+        letters_drawn_msg_b = None
+        
+        for msg in received_a_pass:
+            if msg['name'] == 'letters_drawn':
+                letters_drawn_msg_a = msg
+                break
+        
+        for msg in received_b_pass:
+            if msg['name'] == 'letters_drawn':
+                letters_drawn_msg_b = msg
+                break
+        
+        # Verify letters_drawn event was received by both clients
+        assert letters_drawn_msg_a is not None, f"Client A did not receive letters_drawn event. Received: {received_a_pass}"
+        assert letters_drawn_msg_b is not None, f"Client B did not receive letters_drawn event. Received: {received_b_pass}"
+        
+        # Verify event data structure
+        letters_data_a = letters_drawn_msg_a['args'][0]['data']
+        assert 'letters_drawn' in letters_data_a
+        assert 'letters_remaining_in_bag' in letters_data_a
+        assert isinstance(letters_data_a['letters_drawn'], list)
+        assert isinstance(letters_data_a['letters_remaining_in_bag'], int)
+        assert len(letters_data_a['letters_drawn']) > 0, "Should have drawn at least one letter"
+        
+        letters_drawn = letters_data_a['letters_drawn']
+        letters_remaining = letters_data_a['letters_remaining_in_bag']
+        
         print(f"Integration test completed successfully:")
         print(f"  - Game ID: {game_id}")
         print(f"  - Both clients authenticated and joined")
@@ -966,6 +1008,8 @@ class TestServerClientFlow:
         print(f"  - WebSocket connections established")
         print(f"  - Move 'cad' processed successfully")
         print(f"  - Word added to player's collection: {player_0_words}")
+        print(f"  - Letters drawn event received: {letters_drawn}")
+        print(f"  - Letters remaining in bag: {letters_remaining}")
         
         # Clean up connections
         sio_client_a.disconnect()
