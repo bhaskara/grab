@@ -764,3 +764,209 @@ class TestWebSocketAPI:
                 # Connection was rejected, which is also valid
                 pass
         # If not connected, authentication correctly failed
+
+
+class TestServerClientFlow:
+    """Integration test for complete server-client flow."""
+    
+    def test_full_server_client_integration(self, client, app):
+        """
+        Test complete server-client flow:
+        1. Start server (implicit via test fixtures)
+        2. Multiple clients connect to the server
+        3. Client A creates a game and joins it
+        4. Client B joins that same game
+        5. Client A starts the game
+        6. Verify that the game is active and letters have been drawn
+        """
+        # Step 1: Server is already started via the test fixtures
+        
+        # Step 2: Multiple clients connect (authenticate)
+        # Client A login
+        client_a_response = client.post('/api/auth/login', 
+                                      json={'username': 'clientA'},
+                                      content_type='application/json')
+        assert client_a_response.status_code == 200
+        client_a_data = json.loads(client_a_response.data)
+        client_a_headers = {'Authorization': f'Bearer {client_a_data["data"]["session_token"]}'}
+        client_a_token = client_a_data["data"]["session_token"]
+        
+        # Client B login
+        client_b_response = client.post('/api/auth/login', 
+                                      json={'username': 'clientB'},
+                                      content_type='application/json')
+        assert client_b_response.status_code == 200
+        client_b_data = json.loads(client_b_response.data)
+        client_b_headers = {'Authorization': f'Bearer {client_b_data["data"]["session_token"]}'}
+        client_b_token = client_b_data["data"]["session_token"]
+        
+        # Step 3: Client A creates a game and joins it
+        create_response = client.post('/api/games', 
+                                    json={'max_players': 2},
+                                    headers=client_a_headers,
+                                    content_type='application/json')
+        assert create_response.status_code == 201
+        game_data = json.loads(create_response.data)['data']
+        game_id = game_data['game_id']
+        assert game_data['status'] == 'waiting'
+        
+        # Client A joins the game
+        join_a_response = client.post(f'/api/games/{game_id}/join', 
+                                    json={'skip_websocket_check': True}, 
+                                    headers=client_a_headers)
+        assert join_a_response.status_code == 200
+        
+        # Verify Client A is in the game
+        game_status_response = client.get(f'/api/games/{game_id}', headers=client_a_headers)
+        assert game_status_response.status_code == 200
+        game_status = json.loads(game_status_response.data)['data']
+        assert len(game_status['current_players']) == 1
+        assert game_status['current_players'][0]['username'] == 'clientA'
+        
+        # Step 4: Client B joins that same game
+        join_b_response = client.post(f'/api/games/{game_id}/join', 
+                                    json={'skip_websocket_check': True}, 
+                                    headers=client_b_headers)
+        assert join_b_response.status_code == 200
+        
+        # Verify both clients are in the game
+        game_status_response = client.get(f'/api/games/{game_id}', headers=client_a_headers)
+        assert game_status_response.status_code == 200
+        game_status = json.loads(game_status_response.data)['data']
+        assert len(game_status['current_players']) == 2
+        usernames = [player['username'] for player in game_status['current_players']]
+        assert 'clientA' in usernames
+        assert 'clientB' in usernames
+        
+        # Step 5: Client A starts the game
+        start_response = client.post(f'/api/games/{game_id}/start', 
+                                   json={'test_letters': ['c', 'a', 'd', 'e', 'f']},
+                                   headers=client_a_headers)
+        assert start_response.status_code == 200
+        start_data = json.loads(start_response.data)['data']
+        assert start_data['status'] == 'active'
+        assert start_data['started_at'] is not None
+        
+        # Step 6: Verify that the game is active and letters have been drawn
+        # Check via HTTP API that game is active
+        final_status_response = client.get(f'/api/games/{game_id}', headers=client_a_headers)
+        assert final_status_response.status_code == 200
+        final_status = json.loads(final_status_response.data)['data']
+        assert final_status['status'] == 'active'
+        assert final_status['started_at'] is not None
+        
+        # Test WebSocket connections and verify game state
+        # Create Socket.IO test clients for both players
+        sio_client_a = app.socketio.test_client(app)
+        sio_client_b = app.socketio.test_client(app)
+        
+        # Client A connects via WebSocket (should auto-join active game)
+        sio_client_a.connect(auth={'token': client_a_token})
+        
+        # Client B connects via WebSocket (should auto-join active game)
+        sio_client_b.connect(auth={'token': client_b_token})
+        
+        # Verify both clients receive initial game state
+        received_a = sio_client_a.get_received()
+        received_b = sio_client_b.get_received()
+        
+        # Find connected message with game state for Client A
+        connected_msg_a = None
+        for msg in received_a:
+            if msg['name'] == 'connected' and 'game_state' in msg['args'][0]:
+                connected_msg_a = msg
+                break
+        
+        assert connected_msg_a is not None, f"Client A did not receive connected message with game state. Received: {received_a}"
+        game_state_a = connected_msg_a['args'][0]['game_state']
+        assert game_state_a['game_id'] == game_id
+        assert game_state_a['status'] == 'active'
+        assert 'clientA' in game_state_a['players']
+        assert 'clientB' in game_state_a['players']
+        
+        # Find connected message with game state for Client B
+        connected_msg_b = None
+        for msg in received_b:
+            if msg['name'] == 'connected' and 'game_state' in msg['args'][0]:
+                connected_msg_b = msg
+                break
+        
+        assert connected_msg_b is not None, f"Client B did not receive connected message with game state. Received: {received_b}"
+        game_state_b = connected_msg_b['args'][0]['game_state']
+        assert game_state_b['game_id'] == game_id
+        assert game_state_b['status'] == 'active'
+        assert 'clientA' in game_state_b['players']
+        assert 'clientB' in game_state_b['players']
+        
+        # Verify letters have been drawn by checking game state
+        state_data = json.loads(game_state_a['state'])
+        
+        # Check that letters have been drawn to the pool
+        assert 'pool' in state_data
+        pool_letter_count = sum(state_data['pool'])
+        assert pool_letter_count > 0, "No letters have been drawn to the pool"
+        
+        # Check that the bag has letters removed (initial letters were drawn)
+        assert 'bag' in state_data
+        bag_letter_count = sum(state_data['bag'])
+        # Total Scrabble tiles minus letters drawn should equal bag count
+        # Standard Scrabble has 100 tiles, and we started with test letters drawn
+        assert bag_letter_count > 0, "Bag should still have letters"
+        
+        # Test that moves can be made via WebSocket
+        # Clear any pending messages
+        sio_client_a.get_received()
+        sio_client_b.get_received()
+        
+        # Client A attempts to make a move with "cad" (guaranteed to be a valid word)
+        sio_client_a.emit('move', {'data': 'cad'})
+        
+        # Both clients should receive the move result and updated game state
+        received_a_move = sio_client_a.get_received()
+        received_b_move = sio_client_b.get_received()
+        
+        # Client A should get move_result and it must succeed since "cad" is a valid word
+        move_result_msg = None
+        for msg in received_a_move:
+            if msg['name'] == 'move_result':
+                move_result_msg = msg
+                break
+        
+        assert move_result_msg is not None, f"Client A did not receive move_result. Received: {received_a_move}"
+        assert move_result_msg['args'][0]['success'] is True, f"Move 'cad' should have succeeded but got: {move_result_msg['args'][0]}"
+        
+        # Both clients should receive updated game state since move was successful
+        game_state_update_a = None
+        game_state_update_b = None
+        
+        for msg in received_a_move:
+            if msg['name'] == 'game_state':
+                game_state_update_a = msg
+                break
+        
+        for msg in received_b_move:
+            if msg['name'] == 'game_state':
+                game_state_update_b = msg
+                break
+        
+        assert game_state_update_a is not None, f"Client A did not receive game_state update. Received: {received_a_move}"
+        assert game_state_update_b is not None, f"Client B did not receive game_state update. Received: {received_b_move}"
+        
+        # Verify the move was applied - check that "cad" appears in the player's words
+        updated_state_a = json.loads(game_state_update_a['args'][0]['data']['state'])
+        assert 'words_per_player' in updated_state_a
+        player_0_words = updated_state_a['words_per_player'][0]  # clientA is player 0
+        assert 'cad' in player_0_words, f"Word 'cad' should be in player 0's words but got: {player_0_words}"
+        
+        print(f"Integration test completed successfully:")
+        print(f"  - Game ID: {game_id}")
+        print(f"  - Both clients authenticated and joined")
+        print(f"  - Game started and is active")
+        print(f"  - Letters drawn to pool: {pool_letter_count}")
+        print(f"  - WebSocket connections established")
+        print(f"  - Move 'cad' processed successfully")
+        print(f"  - Word added to player's collection: {player_0_words}")
+        
+        # Clean up connections
+        sio_client_a.disconnect()
+        sio_client_b.disconnect()

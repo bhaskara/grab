@@ -155,8 +155,16 @@ class GrabSocketIOClient:
         url = f"{self.server_url}/api/games/{game_id}/join"
         
         try:
-            response = requests.post(url, headers=self._get_auth_headers())
-            result = response.json()
+            # Send empty JSON data to satisfy API requirements
+            response = requests.post(url, json={}, headers=self._get_auth_headers())
+            
+            # Check if response contains JSON
+            if response.headers.get('content-type', '').startswith('application/json'):
+                result = response.json()
+            else:
+                # Handle non-JSON response (likely an error)
+                print(f"✗ Server returned non-JSON response: {response.text}")
+                return False
             
             if response.status_code == 200 and result.get('success'):
                 print(f"✓ Joined game {game_id}")
@@ -164,6 +172,10 @@ class GrabSocketIOClient:
             else:
                 print(f"✗ Failed to join game: {result.get('error', 'Unknown error')}")
                 return False
+        except requests.exceptions.JSONDecodeError as e:
+            print(f"✗ Join game error - invalid JSON response: {e}")
+            print(f"Response content: {response.text if 'response' in locals() else 'No response'}")
+            return False
         except Exception as e:
             print(f"✗ Join game error: {e}")
             return False

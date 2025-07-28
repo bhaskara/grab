@@ -313,8 +313,40 @@ def _get_game_state(game_id):
     try:
         state, players = game_server.get_game_info(game_id)
         
-        # Get game object for score calculation
+        # Get game object for score calculation (only available after game is started)
         game_data = game_server.games[game_id]
+        
+        # Handle games that haven't been started yet
+        if 'game_object' not in game_data:
+            game_status = game_data.get('status', 'unknown')
+            
+            # Validate that this is indeed a game that hasn't started
+            if game_status not in ['waiting']:
+                raise ValueError(f"Game {game_id} has status '{game_status}' but no game_object. Expected 'waiting' status for games without game_object.")
+            
+            # Game not started yet - return basic waiting state
+            players_dict = {}
+            for username in players:
+                is_connected = any(
+                    player_data['username'] == username and player_data['game_id'] == game_id
+                    for player_data in connected_players.values()
+                )
+                players_dict[username] = {
+                    'connected': is_connected,
+                    'score': 0,
+                    'ready_for_next_turn': False
+                }
+            
+            return {
+                'game_id': game_id,
+                'game_type': game_data.get('game_type', 'unknown'),
+                'status': game_status,
+                'current_turn': 0,
+                'turn_time_remaining': None,
+                'players': players_dict,
+                'state': '{}'  # Empty state for waiting games
+            }
+        
         game = game_data['game_object']
         
         # Build players dict with connection info and actual scores
