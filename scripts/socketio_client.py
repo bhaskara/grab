@@ -205,17 +205,31 @@ class GrabSocketIOClient:
             'Content-Type': 'application/json'
         }
     
-    def create_game(self) -> Optional[str]:
-        """Create a new game."""
+    def create_game(self, test_letters=None) -> Optional[str]:
+        """Create a new game.
+        
+        Parameters
+        ----------
+        test_letters : list of str, optional
+            For testing: specific letters to place in the pool (e.g., ['a', 'b', 'c', 'd', 'e'])
+        """
         url = f"{self.server_url}/api/games"
         
+        # Prepare request data
+        data = {}
+        if test_letters:
+            data['test_letters'] = test_letters
+        
         try:
-            response = requests.post(url, json={}, headers=self._get_auth_headers())
+            response = requests.post(url, json=data, headers=self._get_auth_headers())
             result = response.json()
             
             if response.status_code == 201 and result.get('success'):
                 game_id = result['data']['game_id']
-                print(f"✓ Game created! Game ID: {game_id}")
+                if test_letters:
+                    print(f"✓ Test game created with letters {test_letters}! Game ID: {game_id}")
+                else:
+                    print(f"✓ Game created! Game ID: {game_id}")
                 return game_id
             else:
                 print(f"✗ Failed to create game: {result.get('error', 'Unknown error')}")
