@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from flask import Blueprint, request, jsonify, current_app
 from flask_socketio import emit, join_room
+from loguru import logger
 from .game_server import GameServer
 from .grab_state import DrawLetters
 
@@ -99,6 +100,8 @@ def login():
         # Player already exists in game server, that's fine
         pass
     
+    logger.info(f"Player '{username}' logged in successfully (ID: {player_id})")
+    
     return jsonify({
         'success': True,
         'data': {
@@ -135,6 +138,9 @@ def create_game():
     )
     
     game_data = game_server.get_game_metadata(game_id)
+    
+    logger.info(f"Game '{game_id}' created by player '{request.current_user['username']}' (max_players: {max_players})")
+    
     return jsonify({
         'success': True,
         'data': {
@@ -271,6 +277,8 @@ def start_game(game_id):
     # Start the game
     game_server.start_game(game_id)
     
+    logger.info(f"Game '{game_id}' started by player '{request.current_user['username']}' with {len(players)} players")
+    
     # Get optional test parameters (only if JSON data was sent)
     data = request.get_json(silent=True) or {}
     test_letters = data.get('test_letters')  # Optional list of letters for testing
@@ -348,12 +356,11 @@ def stop_game(game_id):
     game_server.finish_game(game_id)
     
     # Update game server state
-    try:
-        game_server.set_game_state(game_id, 'done')
-    except (KeyError, ValueError):
-        pass  # Game server state management
+    game_server.set_game_state(game_id, 'done')
     
     updated_game_data = game_server.get_game_metadata(game_id)
+    logger.info(f"Game '{game_id}' stopped by player '{request.current_user['username']}'")
+    
     return jsonify({
         'success': True,
         'data': {
@@ -457,6 +464,8 @@ def join_game(game_id):
             print(f"[DEBUG] Failed to send initial game state: {e}")
     
     joined_at = datetime.now(timezone.utc).isoformat() + 'Z'
+    
+    logger.info(f"Player '{username}' joined game '{game_id}'")
     
     return jsonify({
         'success': True,

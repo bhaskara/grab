@@ -7,6 +7,7 @@ with WebSocket support for real-time game communication.
 
 from flask import Flask
 from flask_socketio import SocketIO
+from loguru import logger
 
 def create_app(config=None):
     """
@@ -18,6 +19,16 @@ def create_app(config=None):
     Returns:
         Flask application instance
     """
+    # Configure logging
+    logger.remove()  # Remove default handler
+    logger.add(
+        lambda msg: print(msg),
+        format="{time} | {level} | {message}",
+        level="INFO",
+        colorize=True
+    )
+    logger.info("Starting Grab game server")
+    
     app = Flask(__name__)
     
     # Default configuration
