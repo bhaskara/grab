@@ -28,6 +28,8 @@ import requests
 import socketio
 import threading
 import time
+import queue
+import select
 from typing import Optional, Dict, Any
 
 
@@ -41,6 +43,10 @@ class GrabSocketIOClient:
         self.sio = socketio.Client()
         self.game_active = False
         self.current_game_id: Optional[str] = None
+        self.input_queue = queue.Queue()
+        self.input_thread = None
+        self.should_refresh_prompt = False
+        self.current_prompt = ""
         self.setup_socketio_handlers()
     
     def setup_socketio_handlers(self):
@@ -55,6 +61,7 @@ class GrabSocketIOClient:
         @self.sio.on('game_state')
         def on_game_state(data):
             self.display_game_state(data['data'])
+            self._refresh_prompt()
         
         @self.sio.on('move_result')
         def on_move_result(data):
@@ -64,16 +71,19 @@ class GrabSocketIOClient:
                     self.display_game_state(data['game_state'])
             else:
                 print(f"✗ Move failed: {data.get('error', 'Unknown error')}")
+            self._refresh_prompt()
         
         @self.sio.on('player_disconnected')
         def on_player_disconnected(data):
             player = data.get('player', 'Unknown')
             print(f"📴 {player} disconnected")
+            self._refresh_prompt()
         
         @self.sio.on('player_reconnected')
         def on_player_reconnected(data):
             player = data.get('player', 'Unknown')
             print(f"📱 {player} reconnected")
+            self._refresh_prompt()
         
         @self.sio.on('letters_drawn')
         def on_letters_drawn(data):
@@ -87,10 +97,12 @@ class GrabSocketIOClient:
             # Also display updated game state if provided
             if 'game_state' in event_data:
                 self.display_game_state(event_data['game_state'])
+            self._refresh_prompt()
 
         @self.sio.on('error')
         def on_error(data):
             print(f"❌ Server error: {data.get('message', 'Unknown error')}")
+            self._refresh_prompt()
         
         @self.sio.on('connect')
         def on_connect():
@@ -101,6 +113,55 @@ class GrabSocketIOClient:
             if self.game_active:
                 print("🔌 Socket.IO disconnected")
                 self.game_active = False
+    
+    def _refresh_prompt(self):
+        """Signal that the prompt should be refreshed after output."""
+        self.should_refresh_prompt = True
+    
+    def _input_thread_func(self):
+        """Thread function to handle non-blocking input."""
+        while self.game_active and self.sio.connected:
+            try:
+                # Simple blocking input in thread
+                line = input()
+                if line and self.game_active:
+                    self.input_queue.put(line.strip())
+            except (EOFError, KeyboardInterrupt):
+                break
+            except Exception:
+                time.sleep(0.1)
+    
+    def _get_input_non_blocking(self, prompt: str) -> Optional[str]:
+        """Get input without blocking, allowing Socket.IO events to be processed."""
+        self.current_prompt = prompt
+        
+        # Start input thread if not running
+        if self.input_thread is None or not self.input_thread.is_alive():
+            self.input_thread = threading.Thread(target=self._input_thread_func, daemon=True)
+            self.input_thread.start()
+            # Small delay to let the thread get ready
+            time.sleep(0.05)
+        
+        # Show prompt initially if not already shown
+        if not hasattr(self, '_prompt_shown') or not self._prompt_shown:
+            print(prompt, end='', flush=True)
+            self._prompt_shown = True
+        
+        while self.game_active and self.sio.connected:
+            try:
+                # Check for input with a timeout
+                result = self.input_queue.get(timeout=0.1)
+                self._prompt_shown = False  # Reset for next time
+                return result
+            except queue.Empty:
+                # Check if we need to refresh the prompt
+                if self.should_refresh_prompt:
+                    self.should_refresh_prompt = False
+                    print(f"\n{prompt}", end='', flush=True)
+                    self._prompt_shown = True
+                continue
+        
+        return None
     
     def login(self, username: str) -> bool:
         """Login with username and store session token."""
@@ -317,7 +378,10 @@ class GrabSocketIOClient:
         
         try:
             while self.game_active and self.sio.connected:
-                command = input("\nGame> ").strip()
+                command = self._get_input_non_blocking("Game> ")
+                
+                if command is None:
+                    continue
                 
                 if not command:
                     continue

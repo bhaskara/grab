@@ -18,9 +18,15 @@ connected_players = {}
 
 def get_connected_player_socket_id(username):
     """Find the socket ID for a connected player by username."""
+    print(f"[DEBUG] Looking for socket ID for user {username}")
+    print(f"[DEBUG] Connected players: {[(sid, data['username']) for sid, data in connected_players.items()]}")
+    
     for socket_id, player_data in connected_players.items():
         if player_data['username'] == username:
+            print(f"[DEBUG] Found socket ID {socket_id} for user {username}")
             return socket_id
+    
+    print(f"[DEBUG] No socket ID found for user {username}")
     return None
 
 # Game rooms: game_id -> set of socket_ids
@@ -62,9 +68,11 @@ def init_socketio_handlers(socketio):
             # Check if player is in an active game and auto-join
             try:
                 game_id = game_server.get_player_game(username)
+                print(f"[DEBUG] Player {username} game lookup: {game_id}")
                 if game_id:
                     # Check if game is active
                     game_data = game_server.get_game_metadata(game_id)
+                    print(f"[DEBUG] Game {game_id} status: {game_data['status']}")
                     if game_data['status'] in ['waiting', 'active']:
                         # Join the game room
                         join_room(game_id)
@@ -74,6 +82,8 @@ def init_socketio_handlers(socketio):
                         if game_id not in game_rooms:
                             game_rooms[game_id] = set()
                         game_rooms[game_id].add(request.sid)
+                        
+                        print(f"[DEBUG] Player {username} joined room {game_id}, room now has {len(game_rooms[game_id])} members")
                         
                         # Send initial game state
                         game_state = _get_game_state(game_id)
@@ -135,6 +145,8 @@ def init_socketio_handlers(socketio):
         move_data = data.get('data', '')
         username = player_info['username']
         
+        print(f"[DEBUG] Player {username} making move '{move_data}' in game {game_id}")
+        
         try:
             # Get the game object
             if game_id not in game_server.games:
@@ -192,6 +204,7 @@ def init_socketio_handlers(socketio):
             })
             
             # Broadcast updated state to all players in the game
+            print(f"[DEBUG] Broadcasting game_state to room {game_id}, room has {len(game_rooms.get(game_id, set()))} members")
             socketio.emit('game_state', {'data': game_state}, room=game_id)
             
         except ValueError as e:
@@ -291,12 +304,17 @@ def init_socketio_handlers(socketio):
     @socketio.on('join_game_room')
     def handle_join_game_room(data):
         """Handle request to join a game room (triggered by REST API)."""
+        print(f"[DEBUG] Received join_game_room event: {data}")
+        
         if request.sid not in connected_players:
             emit('error', {'message': 'Not authenticated'})
             return
         
         player_info = connected_players[request.sid]
         game_id = data.get('game_id')
+        username = player_info['username']
+        
+        print(f"[DEBUG] Player {username} attempting to join room {game_id}")
         
         if not game_id:
             emit('error', {'message': 'Game ID required'})
@@ -315,6 +333,8 @@ def init_socketio_handlers(socketio):
             if game_id not in game_rooms:
                 game_rooms[game_id] = set()
             game_rooms[game_id].add(request.sid)
+            
+            print(f"[DEBUG] Player {username} successfully joined room {game_id}, room now has {len(game_rooms[game_id])} members")
             
             # Send current game state
             game_state = _get_game_state(game_id)
