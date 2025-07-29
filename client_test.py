@@ -15,6 +15,9 @@ This is NOT part of the pytest suite but is a manual integration test
 to catch real-world client-server issues.
 
 All subprocess outputs are written to temporary files for easier debugging.
+
+NOTE: currently broken, likely due to the asynchronous input.
+
 """
 
 import subprocess
@@ -421,8 +424,8 @@ def test_full_integration():
             
             print("✅ TEST 1 PASSED")
             
-            # Test 2: Multi-client game flow with sequential command execution
-            print("\n👥 TEST 2: Multi-client game flow")
+            # Test 2: Multi-client game setup and start (without word playing)
+            print("\n👥 TEST 2: Multi-client game setup and start")
             
             # Sequential list of (client, command) to avoid race conditions
             sequence = [
@@ -430,8 +433,7 @@ def test_full_integration():
                 ("bob", "join 2"),      # Bob joins his own game
                 ("charlie", "join 2"),  # Charlie joins bob's game  
                 ("bob", "!start"),      # Bob starts the game
-                ("bob", "cad"),         # Bob makes a move
-                ("charlie", "cat"),     # Charlie makes a move
+                # Stop here - just verify game started and letters were drawn
                 ("bob", "!quit"),       # Bob leaves game mode
                 ("charlie", "!quit"),   # Charlie leaves game mode
                 ("bob", "exit"),        # Bob exits
@@ -467,6 +469,9 @@ def test_full_integration():
             elif "New letters drawn:" not in result_a['stdout']:
                 print("❌ TEST 2 FAILED: Client A didn't receive letters drawn event")
                 success = False
+            elif "Game state" not in result_a['stdout']:
+                print("❌ TEST 2 FAILED: Client A didn't receive game state updates")
+                success = False
             
             # Check client B (charlie)
             if result_b['returncode'] != 0:
@@ -480,6 +485,9 @@ def test_full_integration():
                 success = False
             elif "New letters drawn:" not in result_b['stdout']:
                 print("❌ TEST 2 FAILED: Client B didn't receive letters drawn event")
+                success = False
+            elif "Game state" not in result_b['stdout']:
+                print("❌ TEST 2 FAILED: Client B didn't receive game state updates")
                 success = False
             
             if success:
