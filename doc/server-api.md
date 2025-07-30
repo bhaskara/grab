@@ -15,6 +15,47 @@ All endpoints are relative to the server base URL (e.g., `http://localhost:5000`
 }
 ```
 
+## Required Connection Flow
+
+For reliable real-time gameplay, clients must follow this connection sequence:
+
+1. **Authenticate via HTTP:**
+   ```javascript
+   const response = await fetch('/api/auth/login', {
+     method: 'POST',
+     body: JSON.stringify({username: 'player1'})
+   });
+   const {session_token} = response.data;
+   ```
+
+2. **Establish Socket.IO connection:**
+   ```javascript
+   const socket = io('http://localhost:5000', {
+     auth: {token: session_token}
+   });
+   
+   await new Promise(resolve => {
+     socket.on('connected', resolve);
+   });
+   ```
+
+3. **Join games via HTTP:**
+   ```javascript
+   const response = await fetch(`/api/games/${gameId}/join`, {
+     method: 'POST',
+     headers: {Authorization: `Bearer ${session_token}`}
+   });
+   ```
+
+4. **Receive real-time updates via Socket.IO:**
+   ```javascript
+   socket.on('game_state', (data) => {
+     // Handle game state updates
+   });
+   ```
+
+**Important:** Attempting to join a game without an active Socket.IO connection will result in a 400 error.
+
 ## Endpoints
 
 ### 1. Player Authentication
@@ -229,6 +270,10 @@ Authorization: Bearer <session_token>
 #### `POST /api/games/{game_id}/join`
 Adds the authenticated player to a game.
 
+**Prerequisites:**
+- Player must be authenticated with a valid JWT session token
+- Player must have an active Socket.IO WebSocket connection to the server
+
 **Headers:**
 ```
 Authorization: Bearer <session_token>
@@ -249,6 +294,7 @@ Authorization: Bearer <session_token>
 **Errors:**
 - `401` - Invalid or missing session token
 - `404` - Game not found
+- `400` - Active WebSocket connection required
 - `400` - Game is full, already started, or player already in game
 - `409` - Player is already in another active game
 

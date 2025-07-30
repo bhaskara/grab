@@ -444,6 +444,10 @@ def main():
         print("Failed to login. Exiting.")
         sys.exit(1)
     
+    # Add after login success:
+    print("⚠️  Note: This script requires Socket.IO for real-time gameplay.")
+    print("Use socketio_client.py for full functionality, or ensure WebSocket connection is established.")
+    
     print("\nAvailable commands:")
     print("  start - Create a new game")
     print("  start_game <game_id> - Start an existing game")

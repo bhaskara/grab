@@ -513,10 +513,12 @@ def main():
     if not client.login(username):
         sys.exit(1)
     
-    # Connect Socket.IO
+    # Connect Socket.IO BEFORE showing menu
     if not client.connect_socketio():
+        print("Failed to establish WebSocket connection. Cannot join games.")
         sys.exit(1)
     
+    print("\n✅ Connected and ready!")
     print("\nAvailable commands:")
     print("  create - Create a new game")
     print("  join <game_id> - Join a game")

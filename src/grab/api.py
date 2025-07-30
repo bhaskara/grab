@@ -433,19 +433,17 @@ def join_game(game_id):
             except KeyError:
                 pass
     
-    # Check that WebSocket server is available
+    # Require active WebSocket connection (no exceptions)
     if not socketio_instance:
         return jsonify({'success': False, 'error': 'WebSocket server not initialized'}), 500
-    
-    # Check for testing flag to skip WebSocket requirement
-    data = request.get_json() or {}
-    skip_websocket_check = data.get('skip_websocket_check', False)
-    
-    # Check that player is connected via Socket.IO (required for real-time gameplay)
+
     from .websocket_handlers import get_connected_player_socket_id, connected_players, game_rooms
     socket_id = get_connected_player_socket_id(username)
-    if not socket_id and not skip_websocket_check:
-        return jsonify({'success': False, 'error': 'Player must be connected via WebSocket to join game'}), 400
+    if not socket_id:
+        return jsonify({
+            'success': False, 
+            'error': 'Active WebSocket connection required. Please connect via Socket.IO first.'
+        }), 400
     
     # Add player to game server
     try:
@@ -458,40 +456,28 @@ def join_game(game_id):
         else:
             return jsonify({'success': False, 'error': str(e)}), 400
     
-    # Update player's game_id in connected_players for WebSocket handlers (if connected)
-    if socket_id:
-        connected_players[socket_id]['game_id'] = game_id
-        
-        print(f"[DEBUG] HTTP join: Attempting to join socket {socket_id} (player {username}) to room {game_id}")
-        
-        # Check if we're in testing mode
-        is_testing = current_app.config.get('TESTING', False)
-        
-        # Use the socketio instance's server to join the room directly
-        try:
-            socketio_instance.server.enter_room(socket_id, game_id)
-        except ValueError as e:
-            if "sid is not connected to requested namespace" in str(e) and is_testing:
-                print(f"[DEBUG] HTTP join: Socket {socket_id} not connected to namespace (testing mode)")
-                # In testing, socket may not be connected yet - this is acceptable
-            else:
-                raise
-        else:
-            # Only do room tracking and state sending if enter_room succeeded
-            # Add to game room tracking
-            if game_id not in game_rooms:
-                game_rooms[game_id] = set()
-            game_rooms[game_id].add(socket_id)
-            
-            print(f"[DEBUG] HTTP join: Socket {socket_id} joined room {game_id}, room now has {len(game_rooms[game_id])} members")
-            
-            # Send initial game state to the player
-            try:
-                from .websocket_handlers import _get_game_state
-                game_state = _get_game_state(game_id)
-                socketio_instance.emit('game_state', {'data': game_state}, room=socket_id)
-            except Exception as e:
-                print(f"[DEBUG] Failed to send initial game state: {e}")
+    # We know socket_id exists (checked above), so this will work
+    connected_players[socket_id]['game_id'] = game_id
+
+    # Join Socket.IO room (guaranteed to work since we verified connection)
+    socketio_instance.server.enter_room(socket_id, game_id)
+
+    # Add to game room tracking
+    if game_id not in game_rooms:
+        game_rooms[game_id] = set()
+    game_rooms[game_id].add(socket_id)
+
+    logger.info(f"Player '{username}' joined Socket.IO room {game_id} (room size: {len(game_rooms[game_id])})")
+
+    # Send initial game state to the player
+    try:
+        from .websocket_handlers import _get_game_state
+        game_state = _get_game_state(game_id)
+        socketio_instance.emit('game_state', {'data': game_state}, room=socket_id)
+        logger.info(f"Sent initial game state to player '{username}'")
+    except Exception as e:
+        logger.error(f"Failed to send initial game state to {username}: {e}")
+        # Don't fail the join, but log the error
     
     joined_at = datetime.now(timezone.utc).isoformat() + 'Z'
     

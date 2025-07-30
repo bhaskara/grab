@@ -34,3 +34,5 @@ When exceptions are caught the try block should be as narrow as possible to avoi
 Use the loguru library for logging rather than print.
 
 The full test suite (pytest in the repo root) should always be run and validated to pass before making a commit.
+
+Imports should generally go at the top of a file unless there's a specific reason.
