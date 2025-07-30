@@ -18,7 +18,7 @@ Commands after login:
 In game mode:
     <word> - Attempt to make a word
     !ready or !r - Mark ready for next turn
-    !status or !s - Get current game status
+    !print or !p - Get current game status
     !end or !e - End the game (creator only)
     !quit or !q - Leave game and return to main menu
 """
@@ -304,7 +304,14 @@ class GrabSocketIOClient:
         
         try:
             response = requests.delete(url, headers=self._get_auth_headers())
-            result = response.json()
+            
+            # Check if response contains JSON
+            if response.headers.get('content-type', '').startswith('application/json'):
+                result = response.json()
+            else:
+                # Handle non-JSON response (likely an error)
+                print(f"✗ Server returned non-JSON response: {response.text}")
+                return False
             
             if response.status_code == 200 and result.get('success'):
                 print(f"✓ Ended game {game_id}")
@@ -312,6 +319,10 @@ class GrabSocketIOClient:
             else:
                 print(f"✗ Failed to end game: {result.get('error', 'Unknown error')}")
                 return False
+        except requests.exceptions.JSONDecodeError as e:
+            print(f"✗ End game error - invalid JSON response: {e}")
+            print(f"Response content: {response.text if 'response' in locals() else 'No response'}")
+            return False
         except Exception as e:
             print(f"✗ End game error: {e}")
             return False
