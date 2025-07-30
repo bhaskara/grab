@@ -629,6 +629,20 @@ Broadcast when a player reconnects.
 
 ---
 
+#### **`game_ended`**
+Broadcast when a game is ended by the creator.
+
+**Data:**
+```json
+{
+  "ended_by": "username",
+  "reason": "Game ended by creator",
+  "final_game_state": { ... }  // Final game state object (optional)
+}
+```
+
+---
+
 #### **`connected`**
 Sent to client after successful authentication.
 

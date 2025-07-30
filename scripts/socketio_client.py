@@ -101,6 +101,17 @@ class GrabSocketIOClient:
                 self.display_game_state(event_data['game_state'])
             self._refresh_prompt()
 
+        @self.sio.on('game_ended')
+        def on_game_ended(data):
+            ended_by = data.get('ended_by', 'Unknown')
+            reason = data.get('reason', 'Game ended')
+            print(f"\n🏁 Game ended by {ended_by}: {reason}")
+            
+            # Display final game state if provided
+            if 'final_game_state' in data:
+                self.display_game_state(data['final_game_state'])
+            self._refresh_prompt()
+
         @self.sio.on('error')
         def on_error(data):
             print(f"❌ Server error: {data.get('message', 'Unknown error')}")

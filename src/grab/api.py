@@ -352,11 +352,30 @@ def stop_game(game_id):
     if game_data['creator_id'] != request.current_user['player_id']:
         return jsonify({'success': False, 'error': 'Only the game creator can stop the game'}), 403
     
+    # Get final game state before stopping the game
+    final_game_state = None
+    try:
+        final_game_state = _get_basic_game_state(game_id)
+    except Exception as e:
+        logger.warning(f"Failed to get final game state for game {game_id}: {e}")
+    
     # Stop the game
     game_server.finish_game(game_id)
     
     # Update game server state
     game_server.set_game_state(game_id, 'done')
+    
+    # Notify all players in the game that it has ended
+    if socketio_instance:
+        try:
+            socketio_instance.emit('game_ended', {
+                'ended_by': request.current_user['username'],
+                'reason': 'Game ended by creator',
+                'final_game_state': final_game_state
+            }, room=game_id)
+            logger.info(f"Broadcasted game_ended event for game {game_id}")
+        except Exception as e:
+            logger.warning(f"Failed to broadcast game_ended event for game {game_id}: {e}")
     
     updated_game_data = game_server.get_game_metadata(game_id)
     logger.info(f"Game '{game_id}' stopped by player '{request.current_user['username']}'")
