@@ -29,4 +29,8 @@ This project is for learning, so please document things.  It doesn't have to be 
   
 In general, things should fail early and informatively.  For example, don't silently catch exceptions and return None within library functions.  Instead, pass those exceptions up unless they can be handled (but do document this behavior).
 
+When exceptions are caught the try block should be as narrow as possible to avoid catching unrelated errors.
+
+Use the loguru library for logging rather than print.
+
 The full test suite (pytest in the repo root) should always be run and validated to pass before making a commit.
