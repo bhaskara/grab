@@ -14,6 +14,45 @@ import socketio
 from src.grab.app import create_app
 from src.grab.game_server import GameServer
 
+def create_test_socketio_connection(app, auth_headers):
+    """Helper to create Socket.IO connection for testing."""
+    # Extract token from auth headers
+    token = auth_headers['Authorization'].split(' ')[1]
+    
+    # Create test Socket.IO client
+    sio_client = app.socketio.test_client(app)
+    sio_client.connect(auth={'token': token})
+    
+    # Wait for connection confirmation
+    received = sio_client.get_received()
+    connected_msg = None
+    for msg in received:
+        if msg['name'] == 'connected':
+            connected_msg = msg
+            break
+    
+    assert connected_msg is not None, "Failed to establish Socket.IO connection"
+    return sio_client
+
+def create_game_with_socketio(client, app, auth_headers):
+    """Helper to create a game and establish Socket.IO connection properly."""
+    # Create a game
+    create_response = client.post('/api/games', 
+                                 json={},
+                                 headers=auth_headers,
+                                 content_type='application/json')
+    assert create_response.status_code == 201
+    game_id = json.loads(create_response.data)['data']['game_id']
+    
+    # Establish Socket.IO connection
+    sio_client = create_test_socketio_connection(app, auth_headers)
+    
+    # Join the game (now works because we have Socket.IO connection)
+    join_response = client.post(f'/api/games/{game_id}/join', headers=auth_headers)
+    assert join_response.status_code == 200
+    
+    return game_id, sio_client
+
 @pytest.fixture
 def app():
     """Create a test Flask application."""
@@ -225,7 +264,7 @@ class TestGameManagement:
         assert data['data']['games'] == []
         assert data['data']['total_games'] == 0
     
-    def test_get_all_games_with_games(self, client, auth_headers, second_auth_headers):
+    def test_get_all_games_with_games(self, client, auth_headers, second_auth_headers, app):
         """Test getting all games when games exist."""
         # Create two games
         create_response1 = client.post('/api/games', 
@@ -242,8 +281,10 @@ class TestGameManagement:
         assert create_response2.status_code == 201
         game_id2 = json.loads(create_response2.data)['data']['game_id']
         
-        # Join first game
-        client.post(f'/api/games/{game_id1}/join', json={'skip_websocket_check': True}, headers=auth_headers)
+        # Join first game with Socket.IO connection
+        sio_client = create_test_socketio_connection(app, auth_headers)
+        join_response = client.post(f'/api/games/{game_id1}/join', headers=auth_headers)
+        assert join_response.status_code == 200
         
         # Get all games
         response = client.get('/api/games', headers=auth_headers)
@@ -271,8 +312,11 @@ class TestGameManagement:
         assert game2_data['status'] == 'waiting'
         assert game2_data['max_players'] == 4
         assert len(game2_data['current_players']) == 0
+        
+        # Clean up
+        sio_client.disconnect()
     
-    def test_start_game_success(self, client, auth_headers):
+    def test_start_game_success(self, client, auth_headers, app):
         """Test successful game start."""
         # Create a game
         create_response = client.post('/api/games', 
@@ -282,7 +326,10 @@ class TestGameManagement:
         game_id = json.loads(create_response.data)['data']['game_id']
         
         # Join the game
-        client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
+        # Need Socket.IO connection for join to work
+        sio_client = create_test_socketio_connection(app, auth_headers)
+        client.post(f'/api/games/{game_id}/join', headers=auth_headers)
+        sio_client.disconnect()
         
         # Start the game
         response = client.post(f'/api/games/{game_id}/start', headers=auth_headers)
@@ -360,8 +407,8 @@ class TestGameManagement:
 class TestPlayerGameAssociation:
     """Test player-game association endpoints."""
     
-    def test_join_game_success(self, client, auth_headers):
-        """Test successful game join."""
+    def test_join_game_success(self, client, auth_headers, app):
+        """Test successful game join with Socket.IO connection."""
         # Create a game
         create_response = client.post('/api/games', 
                                      json={},
@@ -369,15 +416,46 @@ class TestPlayerGameAssociation:
                                      content_type='application/json')
         game_id = json.loads(create_response.data)['data']['game_id']
         
-        # Join the game
-        response = client.post(f'/api/games/{game_id}/join', 
-                              json={'skip_websocket_check': True}, 
-                              headers=auth_headers)
+        # Establish Socket.IO connection FIRST
+        sio_client = create_test_socketio_connection(app, auth_headers)
+        
+        # Now join the game (this will work)
+        response = client.post(f'/api/games/{game_id}/join', headers=auth_headers)
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data['success'] is True
         assert data['data']['game_id'] == game_id
         assert 'joined_at' in data['data']
+        
+        # Verify we receive game state via Socket.IO
+        received = sio_client.get_received()
+        game_state_msg = None
+        for msg in received:
+            if msg['name'] == 'game_state':
+                game_state_msg = msg
+                break
+        
+        assert game_state_msg is not None
+    
+    def test_join_game_requires_websocket_connection(self, client, auth_headers, app):
+        """Test that joining a game requires an active WebSocket connection."""
+        # Create a game
+        create_response = client.post('/api/games', 
+                                     json={},
+                                     headers=auth_headers,
+                                     content_type='application/json')
+        game_id = json.loads(create_response.data)['data']['game_id']
+        
+        # Clear any existing Socket.IO connections to ensure clean test
+        from src.grab.websocket_handlers import connected_players
+        connected_players.clear()
+        
+        # Try to join without Socket.IO connection - should fail
+        response = client.post(f'/api/games/{game_id}/join', headers=auth_headers)
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data['success'] is False
+        assert 'Active WebSocket connection required' in data['error']
     
     def test_join_game_not_found(self, client, auth_headers):
         """Test joining non-existent game."""
@@ -387,45 +465,42 @@ class TestPlayerGameAssociation:
         assert data['success'] is False
         assert 'Game not found' in data['error']
     
-    def test_join_game_already_started(self, client, auth_headers, second_auth_headers):
+    def test_join_game_already_started(self, client, auth_headers, second_auth_headers, app):
         """Test joining game that's already started."""
-        # Create and start a game
-        create_response = client.post('/api/games', 
-                                     json={},
-                                     headers=auth_headers,
-                                     content_type='application/json')
-        game_id = json.loads(create_response.data)['data']['game_id']
+        # Create a game and join with first user (with Socket.IO)
+        game_id, sio_client = create_game_with_socketio(client, app, auth_headers)
         
-        # Join and start the game
-        client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
+        # Start the game
         client.post(f'/api/games/{game_id}/start', headers=auth_headers)
         
-        # Try to join as second user
-        response = client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=second_auth_headers)
+        # Create Socket.IO connection for second user
+        sio_client2 = create_test_socketio_connection(app, second_auth_headers)
+        
+        # Try to join as second user - should fail because game already started
+        response = client.post(f'/api/games/{game_id}/join', headers=second_auth_headers)
         assert response.status_code == 400
         data = json.loads(response.data)
         assert data['success'] is False
         assert 'Game has already started' in data['error']
+        
+        # Clean up
+        sio_client.disconnect()
+        sio_client2.disconnect()
     
-    def test_join_game_twice(self, client, auth_headers):
+    def test_join_game_twice(self, client, auth_headers, app):
         """Test joining same game twice."""
-        # Create a game
-        create_response = client.post('/api/games', 
-                                     json={},
-                                     headers=auth_headers,
-                                     content_type='application/json')
-        game_id = json.loads(create_response.data)['data']['game_id']
+        # Create a game and join with Socket.IO
+        game_id, sio_client = create_game_with_socketio(client, app, auth_headers)
         
-        # Join the game
-        response1 = client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
-        assert response1.status_code == 200
-        
-        # Try to join again
-        response2 = client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
+        # Try to join again - should fail
+        response2 = client.post(f'/api/games/{game_id}/join', headers=auth_headers)
         assert response2.status_code == 400
         data = json.loads(response2.data)
         assert data['success'] is False
         assert 'Player already in game' in data['error']
+        
+        # Clean up
+        sio_client.disconnect()
     
 
 class TestWebSocketConnection:
@@ -455,27 +530,25 @@ class TestWebSocketConnection:
         assert data['success'] is False
         assert 'Player not in this game' in data['error']
     
-    def test_connect_websocket_game_not_active(self, client, auth_headers):
+    def test_connect_websocket_game_not_active(self, client, auth_headers, app):
         """Test WebSocket connection to non-active game."""
         # Create and join a game but don't start it
-        create_response = client.post('/api/games', 
-                                     json={},
-                                     headers=auth_headers,
-                                     content_type='application/json')
-        game_id = json.loads(create_response.data)['data']['game_id']
-        client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
+        game_id, sio_client = create_game_with_socketio(client, app, auth_headers)
         
-        # Try to connect without starting the game
+        # Try to connect via /connect endpoint without starting the game
         response = client.get(f'/api/games/{game_id}/connect', headers=auth_headers)
         assert response.status_code == 400
         data = json.loads(response.data)
         assert data['success'] is False
         assert 'Game is not active' in data['error']
+        
+        # Clean up
+        sio_client.disconnect()
 
 class TestIntegration:
     """Integration tests for complete workflows."""
     
-    def test_complete_game_workflow(self, client, auth_headers, second_auth_headers):
+    def test_complete_game_workflow(self, client, auth_headers, second_auth_headers, app):
         """Test complete game workflow from creation to start."""
         # Create a game
         create_response = client.post('/api/games', 
@@ -485,12 +558,14 @@ class TestIntegration:
         assert create_response.status_code == 201
         game_id = json.loads(create_response.data)['data']['game_id']
         
-        # First player joins
-        join_response1 = client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
+        # First player joins with Socket.IO
+        sio_client1 = create_test_socketio_connection(app, auth_headers)
+        join_response1 = client.post(f'/api/games/{game_id}/join', headers=auth_headers)
         assert join_response1.status_code == 200
         
-        # Second player joins
-        join_response2 = client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=second_auth_headers)
+        # Second player joins with Socket.IO
+        sio_client2 = create_test_socketio_connection(app, second_auth_headers)
+        join_response2 = client.post(f'/api/games/{game_id}/join', headers=second_auth_headers)
         assert join_response2.status_code == 200
         
         # Check game state
@@ -509,8 +584,12 @@ class TestIntegration:
         game_data2 = json.loads(get_response2.data)['data']
         assert game_data2['status'] == 'active'
         assert game_data2['started_at'] is not None
+        
+        # Clean up
+        sio_client1.disconnect()
+        sio_client2.disconnect()
     
-    def test_multiple_games_isolation(self, client, auth_headers, second_auth_headers):
+    def test_multiple_games_isolation(self, client, auth_headers, second_auth_headers, app):
         """Test that multiple games are properly isolated."""
         # Create two games
         create_response1 = client.post('/api/games', 
@@ -528,9 +607,12 @@ class TestIntegration:
         # Verify games are different
         assert game_id1 != game_id2
         
-        # Join different games
-        client.post(f'/api/games/{game_id1}/join', json={'skip_websocket_check': True}, headers=auth_headers)
-        client.post(f'/api/games/{game_id2}/join', json={'skip_websocket_check': True}, headers=second_auth_headers)
+        # Join different games with Socket.IO connections
+        sio_client1 = create_test_socketio_connection(app, auth_headers)
+        client.post(f'/api/games/{game_id1}/join', headers=auth_headers)
+        
+        sio_client2 = create_test_socketio_connection(app, second_auth_headers)
+        client.post(f'/api/games/{game_id2}/join', headers=second_auth_headers)
         
         # Verify game states are independent
         get_response1 = client.get(f'/api/games/{game_id1}', headers=auth_headers)
@@ -543,6 +625,10 @@ class TestIntegration:
         assert len(game_data2['current_players']) == 1
         assert game_data1['current_players'][0]['username'] == 'testuser'
         assert game_data2['current_players'][0]['username'] == 'testuser2'
+        
+        # Clean up
+        sio_client1.disconnect()
+        sio_client2.disconnect()
 
 
 @pytest.fixture
@@ -554,62 +640,17 @@ def socketio_client(app):
 class TestWebSocketAPI:
     """Test WebSocket API functionality."""
     
-    def test_websocket_connection_and_auto_join_game(self, client, auth_headers, app):
-        """Test WebSocket connection and automatic joining of active game."""
-        # Create and start a game
-        create_response = client.post('/api/games', json={}, headers=auth_headers)
-        game_id = json.loads(create_response.data)['data']['game_id']
-        
-        client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
-        client.post(f'/api/games/{game_id}/start', 
-                   json={'test_letters': ['a', 'b', 'c']}, 
-                   headers=auth_headers)
-        
-        # Extract token for WebSocket auth
-        token = auth_headers['Authorization'].split(' ')[1]
-        
-        # Create Socket.IO test client
-        sio_client = app.socketio.test_client(app)
-        
-        # Connect with authentication - should auto-join active game
-        sio_client.connect(auth={'token': token})
-        
-        # Wait for and verify response
-        received = sio_client.get_received()
-        assert len(received) > 0
-        
-        # Find the connected message with game state
-        connected_msg = None
-        for msg in received:
-            if msg['name'] == 'connected':
-                connected_msg = msg
-                break
-        
-        assert connected_msg is not None
-        assert 'game_state' in connected_msg['args'][0]
-        game_state = connected_msg['args'][0]['game_state']
-        assert game_state['game_id'] == game_id
-        assert 'testuser' in game_state['players']
+    # test_websocket_connection_and_auto_join_game removed - auto-join functionality was removed in refactor
     
     def test_websocket_move_handling(self, client, auth_headers, app):
         """Test WebSocket move handling."""
-        # Create and start a game
-        create_response = client.post('/api/games', json={}, headers=auth_headers)
-        game_id = json.loads(create_response.data)['data']['game_id']
+        # Create and join a game with Socket.IO
+        game_id, sio_client = create_game_with_socketio(client, app, auth_headers)
         
-        client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
+        # Start the game
         client.post(f'/api/games/{game_id}/start', 
                    json={'test_letters': ['h', 'e', 'l', 'l', 'o']}, 
                    headers=auth_headers)
-        
-        # Extract token for WebSocket auth
-        token = auth_headers['Authorization'].split(' ')[1]
-        
-        # Create Socket.IO test client
-        sio_client = app.socketio.test_client(app)
-        
-        # Connect (auto-joins active game)
-        sio_client.connect(auth={'token': token})
         
         # Clear received messages
         sio_client.get_received()
@@ -641,26 +682,19 @@ class TestWebSocketAPI:
         assert len(state_data['words_per_player']) > 0
         player_words = state_data['words_per_player'][0]  # First player's words
         assert 'hello' in player_words
+        
+        # Clean up
+        sio_client.disconnect()
     
     def test_websocket_player_action_ready(self, client, auth_headers, app):
         """Test WebSocket player action for ready_for_next_turn."""
-        # Create and start a game
-        create_response = client.post('/api/games', json={}, headers=auth_headers)
-        game_id = json.loads(create_response.data)['data']['game_id']
+        # Create and join a game with Socket.IO
+        game_id, sio_client = create_game_with_socketio(client, app, auth_headers)
         
-        client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
+        # Start the game
         client.post(f'/api/games/{game_id}/start', 
                    json={'test_letters': ['r', 'e', 'a', 'd', 'y']}, 
                    headers=auth_headers)
-        
-        # Extract token for WebSocket auth
-        token = auth_headers['Authorization'].split(' ')[1]
-        
-        # Create Socket.IO test client
-        sio_client = app.socketio.test_client(app)
-        
-        # Connect (auto-joins active game)
-        sio_client.connect(auth={'token': token})
         
         # Clear received messages
         sio_client.get_received()
@@ -692,26 +726,19 @@ class TestWebSocketAPI:
         initial_pool_count = sum([1, 0, 0, 1, 1])  # r, e, a, d, y
         current_pool_count = sum(state_data['pool'])
         assert current_pool_count > initial_pool_count  # New letter was drawn
+        
+        # Clean up
+        sio_client.disconnect()
     
     def test_websocket_get_status(self, client, auth_headers, app):
         """Test WebSocket get_status request."""
-        # Create and start a game
-        create_response = client.post('/api/games', json={}, headers=auth_headers)
-        game_id = json.loads(create_response.data)['data']['game_id']
+        # Create and join a game with Socket.IO
+        game_id, sio_client = create_game_with_socketio(client, app, auth_headers)
         
-        client.post(f'/api/games/{game_id}/join', json={'skip_websocket_check': True}, headers=auth_headers)
+        # Start the game
         client.post(f'/api/games/{game_id}/start', 
                    json={'test_letters': ['s', 't', 'a', 't', 'u', 's']}, 
                    headers=auth_headers)
-        
-        # Extract token for WebSocket auth
-        token = auth_headers['Authorization'].split(' ')[1]
-        
-        # Create Socket.IO test client
-        sio_client = app.socketio.test_client(app)
-        
-        # Connect (auto-joins active game)
-        sio_client.connect(auth={'token': token})
         
         # Clear received messages
         sio_client.get_received()
@@ -733,6 +760,9 @@ class TestWebSocketAPI:
         game_state = game_state_msg['args'][0]['data']
         assert game_state['game_id'] == game_id
         assert 'testuser' in game_state['players']
+        
+        # Clean up
+        sio_client.disconnect()
     
     def test_websocket_authentication_failure(self, app):
         """Test WebSocket connection with invalid authentication."""
@@ -810,10 +840,11 @@ class TestServerClientFlow:
         game_id = game_data['game_id']
         assert game_data['status'] == 'waiting'
         
-        # Client A joins the game
-        join_a_response = client.post(f'/api/games/{game_id}/join', 
-                                    json={'skip_websocket_check': True}, 
-                                    headers=client_a_headers)
+        # Client A joins the game (with Socket.IO connection)
+        client_a_sio = app.socketio.test_client(app)
+        client_a_sio.connect(auth={'token': client_a_token})
+        
+        join_a_response = client.post(f'/api/games/{game_id}/join', headers=client_a_headers)
         assert join_a_response.status_code == 200
         
         # Verify Client A is in the game
@@ -823,10 +854,11 @@ class TestServerClientFlow:
         assert len(game_status['current_players']) == 1
         assert game_status['current_players'][0]['username'] == 'clientA'
         
-        # Step 4: Client B joins that same game
-        join_b_response = client.post(f'/api/games/{game_id}/join', 
-                                    json={'skip_websocket_check': True}, 
-                                    headers=client_b_headers)
+        # Step 4: Client B joins that same game (with Socket.IO connection)
+        client_b_sio = app.socketio.test_client(app)
+        client_b_sio.connect(auth={'token': client_b_token})
+        
+        join_b_response = client.post(f'/api/games/{game_id}/join', headers=client_b_headers)
         assert join_b_response.status_code == 200
         
         # Verify both clients are in the game
@@ -855,48 +887,28 @@ class TestServerClientFlow:
         assert final_status['status'] == 'active'
         assert final_status['started_at'] is not None
         
-        # Test WebSocket connections and verify game state
-        # Create Socket.IO test clients for both players
-        sio_client_a = app.socketio.test_client(app)
-        sio_client_b = app.socketio.test_client(app)
+        # Test WebSocket communication by getting game status
+        # Clear any pending messages from both clients
+        client_a_sio.get_received()
+        client_b_sio.get_received()
         
-        # Client A connects via WebSocket (should auto-join active game)
-        sio_client_a.connect(auth={'token': client_a_token})
+        # Client A requests game status via WebSocket
+        client_a_sio.emit('get_status')
         
-        # Client B connects via WebSocket (should auto-join active game)
-        sio_client_b.connect(auth={'token': client_b_token})
-        
-        # Verify both clients receive initial game state
-        received_a = sio_client_a.get_received()
-        received_b = sio_client_b.get_received()
-        
-        # Find connected message with game state for Client A
-        connected_msg_a = None
+        # Get game state response
+        received_a = client_a_sio.get_received()
+        game_state_msg = None
         for msg in received_a:
-            if msg['name'] == 'connected' and 'game_state' in msg['args'][0]:
-                connected_msg_a = msg
+            if msg['name'] == 'game_state':
+                game_state_msg = msg
                 break
         
-        assert connected_msg_a is not None, f"Client A did not receive connected message with game state. Received: {received_a}"
-        game_state_a = connected_msg_a['args'][0]['game_state']
+        assert game_state_msg is not None, "Client A should receive game state via WebSocket"
+        game_state_a = game_state_msg['args'][0]['data']
         assert game_state_a['game_id'] == game_id
         assert game_state_a['status'] == 'active'
         assert 'clientA' in game_state_a['players']
         assert 'clientB' in game_state_a['players']
-        
-        # Find connected message with game state for Client B
-        connected_msg_b = None
-        for msg in received_b:
-            if msg['name'] == 'connected' and 'game_state' in msg['args'][0]:
-                connected_msg_b = msg
-                break
-        
-        assert connected_msg_b is not None, f"Client B did not receive connected message with game state. Received: {received_b}"
-        game_state_b = connected_msg_b['args'][0]['game_state']
-        assert game_state_b['game_id'] == game_id
-        assert game_state_b['status'] == 'active'
-        assert 'clientA' in game_state_b['players']
-        assert 'clientB' in game_state_b['players']
         
         # Verify letters have been drawn by checking game state
         state_data = json.loads(game_state_a['state'])
@@ -915,15 +927,15 @@ class TestServerClientFlow:
         
         # Test that moves can be made via WebSocket
         # Clear any pending messages
-        sio_client_a.get_received()
-        sio_client_b.get_received()
+        client_a_sio.get_received()
+        client_b_sio.get_received()
         
         # Client A attempts to make a move with "cad" (guaranteed to be a valid word)
-        sio_client_a.emit('move', {'data': 'cad'})
+        client_a_sio.emit('move', {'data': 'cad'})
         
         # Both clients should receive the move result and updated game state
-        received_a_move = sio_client_a.get_received()
-        received_b_move = sio_client_b.get_received()
+        received_a_move = client_a_sio.get_received()
+        received_b_move = client_b_sio.get_received()
         
         # Client A should get move_result and it must succeed since "cad" is a valid word
         move_result_msg = None
@@ -960,16 +972,16 @@ class TestServerClientFlow:
         
         # Test letters_drawn event by having both players pass (should trigger letter draw)
         # Clear any pending messages
-        sio_client_a.get_received()
-        sio_client_b.get_received()
+        client_a_sio.get_received()
+        client_b_sio.get_received()
         
         # Both clients signal ready for next turn (pass)
-        sio_client_a.emit('player_action', {'data': 'ready_for_next_turn'})
-        sio_client_b.emit('player_action', {'data': 'ready_for_next_turn'})
+        client_a_sio.emit('player_action', {'data': 'ready_for_next_turn'})
+        client_b_sio.emit('player_action', {'data': 'ready_for_next_turn'})
         
         # Check if letters_drawn event was emitted
-        received_a_pass = sio_client_a.get_received()
-        received_b_pass = sio_client_b.get_received()
+        received_a_pass = client_a_sio.get_received()
+        received_b_pass = client_b_sio.get_received()
         
         # Look for letters_drawn event
         letters_drawn_msg_a = None
@@ -1012,5 +1024,5 @@ class TestServerClientFlow:
         print(f"  - Letters remaining in bag: {letters_remaining}")
         
         # Clean up connections
-        sio_client_a.disconnect()
-        sio_client_b.disconnect()
+        client_a_sio.disconnect()
+        client_b_sio.disconnect()

@@ -9,6 +9,7 @@ import json
 import jwt
 from flask import request, current_app
 from flask_socketio import emit, join_room, leave_room, disconnect
+from loguru import logger
 from .api import game_server, active_sessions, verify_session_token
 from .grab_state import DrawLetters
 
@@ -38,7 +39,7 @@ def init_socketio_handlers(socketio):
     
     @socketio.on('connect')
     def handle_connect(auth):
-        """Handle WebSocket connection with authentication."""
+        """Handle WebSocket connection with authentication only."""
         try:
             # Get token from auth data or query parameters
             token = None
@@ -57,52 +58,21 @@ def init_socketio_handlers(socketio):
                 emit('error', {'message': 'Invalid or expired token'})
                 return False
             
-            # Store player connection info
+            # Store player connection info (no game_id yet)
             username = payload['username']
             connected_players[request.sid] = {
                 'player_id': payload['player_id'],
                 'username': username,
-                'game_id': None  # Will be set if player is in an active game
+                'game_id': None  # Will be set when they join a game via HTTP
             }
             
-            # Check if player is in an active game and auto-join
-            try:
-                game_id = game_server.get_player_game(username)
-                print(f"[DEBUG] Player {username} game lookup: {game_id}")
-                if game_id:
-                    # Check if game is active
-                    game_data = game_server.get_game_metadata(game_id)
-                    print(f"[DEBUG] Game {game_id} status: {game_data['status']}")
-                    if game_data['status'] in ['waiting', 'active']:
-                        # Join the game room
-                        join_room(game_id)
-                        connected_players[request.sid]['game_id'] = game_id
-                        
-                        # Add to game room tracking
-                        if game_id not in game_rooms:
-                            game_rooms[game_id] = set()
-                        game_rooms[game_id].add(request.sid)
-                        
-                        print(f"[DEBUG] Player {username} joined room {game_id}, room now has {len(game_rooms[game_id])} members")
-                        
-                        # Send initial game state
-                        game_state = _get_game_state(game_id)
-                        emit('connected', {
-                            'message': 'Successfully connected',
-                            'game_state': game_state
-                        })
-                        
-                        # Notify other players of reconnection
-                        socketio.emit('player_reconnected', 
-                                     {'player': username},
-                                     room=game_id, 
-                                     include_self=False)
-                        return
-            except KeyError:
-                # Player doesn't exist in game server - continue with normal connection
-                pass
+            # Simple success response
+            emit('connected', {
+                'message': 'Successfully connected',
+                'username': username
+            })
             
-            emit('connected', {'message': 'Successfully connected'})
+            logger.info(f"Player '{username}' connected via Socket.IO")
             
         except Exception as e:
             emit('error', {'message': f'Connection error: {str(e)}'})
@@ -114,19 +84,22 @@ def init_socketio_handlers(socketio):
         if request.sid in connected_players:
             player_info = connected_players[request.sid]
             game_id = player_info.get('game_id')
+            username = player_info['username']
             
             if game_id:
                 # Notify other players in the game
                 socketio.emit('player_disconnected', 
-                             {'player': player_info['username']},
+                             {'player': username},
                              room=game_id)
                 
-                # Remove from game room
+                # Remove from game room tracking
                 if game_id in game_rooms:
                     game_rooms[game_id].discard(request.sid)
+                    logger.info(f"Player '{username}' removed from game room {game_id}")
             
             # Remove from connected players
             del connected_players[request.sid]
+            logger.info(f"Player '{username}' disconnected from Socket.IO")
     
     @socketio.on('move')
     def handle_move(data):
@@ -301,47 +274,6 @@ def init_socketio_handlers(socketio):
         else:
             emit('error', {'message': f'Unknown action: {action}'})
     
-    @socketio.on('join_game_room')
-    def handle_join_game_room(data):
-        """Handle request to join a game room (triggered by REST API)."""
-        print(f"[DEBUG] Received join_game_room event: {data}")
-        
-        if request.sid not in connected_players:
-            emit('error', {'message': 'Not authenticated'})
-            return
-        
-        player_info = connected_players[request.sid]
-        game_id = data.get('game_id')
-        username = player_info['username']
-        
-        print(f"[DEBUG] Player {username} attempting to join room {game_id}")
-        
-        if not game_id:
-            emit('error', {'message': 'Game ID required'})
-            return
-        
-        try:
-            # Verify player is in this game
-            if player_info['game_id'] != game_id:
-                emit('error', {'message': 'Player not in this game'})
-                return
-            
-            # Join the game room
-            join_room(game_id)
-            
-            # Add to game room tracking
-            if game_id not in game_rooms:
-                game_rooms[game_id] = set()
-            game_rooms[game_id].add(request.sid)
-            
-            print(f"[DEBUG] Player {username} successfully joined room {game_id}, room now has {len(game_rooms[game_id])} members")
-            
-            # Send current game state
-            game_state = _get_game_state(game_id)
-            emit('game_state', {'data': game_state})
-            
-        except Exception as e:
-            emit('error', {'message': f'Failed to join game room: {str(e)}'})
 
 
 def _get_game_state(game_id):
