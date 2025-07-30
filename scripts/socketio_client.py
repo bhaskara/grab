@@ -19,6 +19,7 @@ In game mode:
     <word> - Attempt to make a word
     !ready or !r - Mark ready for next turn
     !print or !p - Get current game status
+    !start or !s - Start a game (creator only)
     !end or !e - End the game (creator only)
     !quit or !q - Leave game and return to main menu
 """
