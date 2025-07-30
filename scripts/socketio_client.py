@@ -286,6 +286,35 @@ class GrabSocketIOClient:
             print(f"✗ Start game error: {e}")
             return False
     
+    def end_game(self, game_id: str) -> bool:
+        """End/stop a game.
+        
+        Parameters
+        ----------
+        game_id : str
+            The ID of the game to end
+            
+        Returns
+        -------
+        bool
+            True if the game was successfully ended, False otherwise
+        """
+        url = f"{self.server_url}/api/games/{game_id}"
+        
+        try:
+            response = requests.delete(url, headers=self._get_auth_headers())
+            result = response.json()
+            
+            if response.status_code == 200 and result.get('success'):
+                print(f"✓ Ended game {game_id}")
+                return True
+            else:
+                print(f"✗ Failed to end game: {result.get('error', 'Unknown error')}")
+                return False
+        except Exception as e:
+            print(f"✗ End game error: {e}")
+            return False
+    
     def list_games(self):
         """List all games on the server."""
         url = f"{self.server_url}/api/games"
@@ -382,7 +411,7 @@ class GrabSocketIOClient:
     def enter_game_mode(self, game_id: str):
         """Enter interactive game mode."""
         print(f"\n🎮 Entering game mode for {game_id}")
-        print("Commands: <word> to make a move, !ready/!r for next turn, !print/!p for state, !start/!s to start game, !quit/!q to leave")
+        print("Commands: <word> to make a move, !ready/!r for next turn, !print/!p for state, !start/!s to start game, !end to end game, !quit/!q to leave")
         
         self.current_game_id = game_id
         self.game_active = True
@@ -417,9 +446,16 @@ class GrabSocketIOClient:
                             print("✓ Game started!")
                         else:
                             print("✗ Failed to start game (you may not be the creator)")
+                    elif action == 'end':
+                        if self.end_game(self.current_game_id):
+                            print("✓ Game ended!")
+                            # Request final game state
+                            self.sio.emit('get_status')
+                        else:
+                            print("✗ Failed to end game (you may not be the creator)")
                     else:
                         print(f"Unknown action: !{action}")
-                        print("Available actions: !ready/!r, !print/!p, !start/!s, !quit/!q")
+                        print("Available actions: !ready/!r, !print/!p, !start/!s, !end, !quit/!q")
                 else:
                     # Treat as a word move
                     self.sio.emit('move', {'data': command.lower()})
