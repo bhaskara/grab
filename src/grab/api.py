@@ -358,6 +358,17 @@ def stop_game(game_id):
     # Update game server state
     game_server.set_game_state(game_id, 'done')
     
+    # Get final game state after stopping the game to include finished status
+    final_game_state = _get_basic_game_state(game_id)
+    
+    # Notify all players in the game that it has ended
+    socketio_instance.emit('game_ended', {
+        'ended_by': request.current_user['username'],
+        'reason': 'Game ended by creator',
+        'final_game_state': final_game_state
+    }, room=game_id)
+    logger.info(f"Broadcasted game_ended event for game {game_id}")
+    
     updated_game_data = game_server.get_game_metadata(game_id)
     logger.info(f"Game '{game_id}' stopped by player '{request.current_user['username']}'")
     

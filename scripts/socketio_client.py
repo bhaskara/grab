@@ -18,7 +18,9 @@ Commands after login:
 In game mode:
     <word> - Attempt to make a word
     !ready or !r - Mark ready for next turn
-    !status or !s - Get current game status
+    !print or !p - Get current game status
+    !start or !s - Start a game (creator only)
+    !end or !e - End the game (creator only)
     !quit or !q - Leave game and return to main menu
 """
 
@@ -97,6 +99,17 @@ class GrabSocketIOClient:
             # Also display updated game state if provided
             if 'game_state' in event_data:
                 self.display_game_state(event_data['game_state'])
+            self._refresh_prompt()
+
+        @self.sio.on('game_ended')
+        def on_game_ended(data):
+            ended_by = data.get('ended_by', 'Unknown')
+            reason = data.get('reason', 'Game ended')
+            print(f"\n🏁 Game ended by {ended_by}: {reason}")
+            
+            # Display final game state if provided
+            if 'final_game_state' in data:
+                self.display_game_state(data['final_game_state'])
             self._refresh_prompt()
 
         @self.sio.on('error')
@@ -286,6 +299,46 @@ class GrabSocketIOClient:
             print(f"✗ Start game error: {e}")
             return False
     
+    def end_game(self, game_id: str) -> bool:
+        """End/stop a game.
+        
+        Parameters
+        ----------
+        game_id : str
+            The ID of the game to end
+            
+        Returns
+        -------
+        bool
+            True if the game was successfully ended, False otherwise
+        """
+        url = f"{self.server_url}/api/games/{game_id}"
+        
+        try:
+            response = requests.delete(url, headers=self._get_auth_headers())
+            
+            # Check if response contains JSON
+            if response.headers.get('content-type', '').startswith('application/json'):
+                result = response.json()
+            else:
+                # Handle non-JSON response (likely an error)
+                print(f"✗ Server returned non-JSON response: {response.text}")
+                return False
+            
+            if response.status_code == 200 and result.get('success'):
+                print(f"✓ Ended game {game_id}")
+                return True
+            else:
+                print(f"✗ Failed to end game: {result.get('error', 'Unknown error')}")
+                return False
+        except requests.exceptions.JSONDecodeError as e:
+            print(f"✗ End game error - invalid JSON response: {e}")
+            print(f"Response content: {response.text if 'response' in locals() else 'No response'}")
+            return False
+        except Exception as e:
+            print(f"✗ End game error: {e}")
+            return False
+    
     def list_games(self):
         """List all games on the server."""
         url = f"{self.server_url}/api/games"
@@ -382,7 +435,7 @@ class GrabSocketIOClient:
     def enter_game_mode(self, game_id: str):
         """Enter interactive game mode."""
         print(f"\n🎮 Entering game mode for {game_id}")
-        print("Commands: <word> to make a move, !ready/!r for next turn, !print/!p for state, !start/!s to start game, !quit/!q to leave")
+        print("Commands: <word> to make a move, !ready/!r for next turn, !print/!p for state, !start/!s to start game, !end/!e to end game, !quit/!q to leave")
         
         self.current_game_id = game_id
         self.game_active = True
@@ -417,9 +470,16 @@ class GrabSocketIOClient:
                             print("✓ Game started!")
                         else:
                             print("✗ Failed to start game (you may not be the creator)")
+                    elif action in ['end', 'e']:
+                        if self.end_game(self.current_game_id):
+                            print("✓ Game ended!")
+                            # Request final game state
+                            self.sio.emit('get_status')
+                        else:
+                            print("✗ Failed to end game (you may not be the creator)")
                     else:
                         print(f"Unknown action: !{action}")
-                        print("Available actions: !ready/!r, !print/!p, !start/!s, !quit/!q")
+                        print("Available actions: !ready/!r, !print/!p, !start/!s, !end/!e, !quit/!q")
                 else:
                     # Treat as a word move
                     self.sio.emit('move', {'data': command.lower()})
