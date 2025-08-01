@@ -1,4 +1,4 @@
-from typing import Set, Union, Optional, Tuple
+from typing import Set, Union, Optional, Tuple, List
 import os
 import random
 import numpy as np
@@ -79,7 +79,7 @@ class Grab(object):
     
     """
 
-    def __init__(self, num_players: int = 2, word_list: str = 'twl06', letter_scores: np.ndarray = None, next_letters: Optional[list] = None):
+    def __init__(self, num_players: int = 2, word_list: str = 'twl06', letter_scores: np.ndarray = None, next_letters: Optional[List[str]] = None):
         """Initialize a Grab game instance.
         
         Parameters
@@ -459,6 +459,7 @@ class Grab(object):
                 bag_copy[letter_idx] -= 1
             else:
                 # Fall back to random sampling
+                # Rebuild available_letters from current bag_copy state each iteration
                 available_letters = []
                 for letter_idx in range(26):
                     letter_char = chr(ord('a') + letter_idx)
