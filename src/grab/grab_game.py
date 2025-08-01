@@ -1,5 +1,6 @@
-from typing import Set, Union, Optional, Tuple
+from typing import Set, Union, Optional, Tuple, List
 import os
+import random
 import numpy as np
 from .grab_state import State, Word, MakeWord, DrawLetters, Move
 
@@ -78,7 +79,7 @@ class Grab(object):
     
     """
 
-    def __init__(self, num_players: int = 2, word_list: str = 'twl06', letter_scores: np.ndarray = None):
+    def __init__(self, num_players: int = 2, word_list: str = 'twl06', letter_scores: np.ndarray = None, next_letters: Optional[List[str]] = None):
         """Initialize a Grab game instance.
         
         Parameters
@@ -91,6 +92,9 @@ class Grab(object):
         letter_scores : np.ndarray, optional
             Length-26 array containing per-letter scores (a=0, b=1, ..., z=25).
             Defaults to standard Scrabble letter scores.
+        next_letters : List[str], optional
+            Initial list of letters to be drawn in order before falling back to random 
+            sampling. If None, creates empty list.
         """
         if num_players < 1:
             raise ValueError("Number of players must be at least 1")
@@ -105,7 +109,7 @@ class Grab(object):
         self.valid_words = load_word_list(word_list)
         
         # Initialize the game state to the starting state
-        self._state = State(num_players=num_players)
+        self._state = State(num_players=num_players, next_letters=next_letters)
 
     @property
     def state(self) -> State:
@@ -193,7 +197,8 @@ class Grab(object):
                 pool=current_state.pool.copy(),
                 bag=current_state.bag.copy(),
                 scores=current_state.scores.copy(),
-                passed=current_state.passed.copy()
+                passed=current_state.passed.copy(),
+                next_letters=current_state.next_letters.copy()
             )
             
             # Mark this player as passed
@@ -339,7 +344,8 @@ class Grab(object):
                     pool=pool_counts - remaining_counts,  # Efficient pool update
                     bag=state.bag.copy(),
                     scores=state.scores.copy(),
-                    passed=state.passed.copy()
+                    passed=state.passed.copy(),
+                    next_letters=state.next_letters.copy()
                 )
                 
                 # Remove used words efficiently using stored indices (in reverse order)
@@ -382,7 +388,8 @@ class Grab(object):
             pool=state.pool.copy(),
             bag=state.bag.copy(),
             scores=state.scores.copy(),
-            passed=state.passed.copy()
+            passed=state.passed.copy(),
+            next_letters=state.next_letters.copy()
         )
         
         # Add bonus scores for each player based on their remaining words
@@ -400,7 +407,9 @@ class Grab(object):
     
 
     def construct_draw_letters(self, state: State, num_letters: int = 1) -> tuple[DrawLetters, State]:
-        """Construct a DrawLetters move that draws random letters from the bag to the pool.
+        """Construct a DrawLetters move that draws letters from the bag to the pool.
+        
+        Uses next_letters list first, then falls back to random sampling.
 
         Parameters
         ----------
@@ -419,7 +428,8 @@ class Grab(object):
         Raises
         ------
         ValueError
-            If num_letters is not positive or if there aren't enough letters in the bag
+            If num_letters is not positive, if there aren't enough letters in the bag,
+            or if next_letters contains letters not available in the bag
 
         """
         if num_letters <= 0:
@@ -430,16 +440,39 @@ class Grab(object):
         if total_letters_in_bag < num_letters:
             raise ValueError(f"Not enough letters in bag. Requested {num_letters}, but only {total_letters_in_bag} available")
         
-        # Create a list of available letters based on bag contents
-        available_letters = []
-        for letter_idx in range(26):
-            letter_char = chr(ord('a') + letter_idx)
-            count = state.bag[letter_idx]
-            available_letters.extend([letter_char] * count)
+        drawn_letters = []
+        remaining_next_letters = state.next_letters.copy()
+        bag_copy = state.bag.copy()
         
-        # Randomly select letters from the bag
-        import random
-        drawn_letters = random.sample(available_letters, num_letters)
+        # First, try to draw from next_letters
+        for _ in range(num_letters):
+            if remaining_next_letters:
+                # Pop the next letter from the list
+                letter = remaining_next_letters.pop(0)
+                letter_idx = ord(letter) - ord('a')
+                
+                # Check if this letter is available in the bag
+                if bag_copy[letter_idx] <= 0:
+                    raise ValueError(f"Letter '{letter}' from next_letters is not available in the bag")
+                
+                drawn_letters.append(letter)
+                bag_copy[letter_idx] -= 1
+            else:
+                # Fall back to random sampling
+                # Rebuild available_letters from current bag_copy state each iteration
+                available_letters = []
+                for letter_idx in range(26):
+                    letter_char = chr(ord('a') + letter_idx)
+                    count = bag_copy[letter_idx]
+                    available_letters.extend([letter_char] * count)
+                
+                if not available_letters:
+                    raise ValueError("No more letters available in bag for random sampling")
+                
+                letter = random.choice(available_letters)
+                drawn_letters.append(letter)
+                letter_idx = ord(letter) - ord('a')
+                bag_copy[letter_idx] -= 1
         
         # Create the DrawLetters move
         move = DrawLetters(drawn_letters)
@@ -449,15 +482,15 @@ class Grab(object):
             num_players=state.num_players,
             words_per_player=[words[:] for words in state.words_per_player],  # Deep copy
             pool=state.pool.copy(),
-            bag=state.bag.copy(),
+            bag=bag_copy,
             scores=state.scores.copy(),
-            passed=[False] * state.num_players
+            passed=[False] * state.num_players,
+            next_letters=remaining_next_letters
         )
         
-        # Remove drawn letters from the bag and add them to the pool
+        # Add drawn letters to the pool (bag already updated in bag_copy)
         for letter in drawn_letters:
             letter_idx = ord(letter) - ord('a')
-            new_state.bag[letter_idx] -= 1
             new_state.pool[letter_idx] += 1
         
         return move, new_state

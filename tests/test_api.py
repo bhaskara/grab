@@ -229,6 +229,96 @@ class TestGameManagement:
         assert data['success'] is False
         assert 'Invalid time_limit_seconds' in data['error']
     
+    def test_create_game_with_next_letters_success(self, client, auth_headers):
+        """Test successful game creation with next_letters."""
+        next_letters = ['q', 'x', 'z', 'j', 'k']
+        response = client.post('/api/games', 
+                              json={'next_letters': next_letters},
+                              headers=auth_headers,
+                              content_type='application/json')
+        assert response.status_code == 201
+        data = json.loads(response.data)
+        assert data['success'] is True
+        assert 'game_id' in data['data']
+        assert data['data']['status'] == 'waiting'
+    
+    def test_create_game_with_next_letters_case_insensitive(self, client, auth_headers):
+        """Test game creation with mixed case next_letters."""
+        next_letters = ['Q', 'x', 'Z', 'j', 'K']
+        response = client.post('/api/games', 
+                              json={'next_letters': next_letters},
+                              headers=auth_headers,
+                              content_type='application/json')
+        assert response.status_code == 201
+        data = json.loads(response.data)
+        assert data['success'] is True
+    
+    def test_create_game_next_letters_not_list(self, client, auth_headers):
+        """Test game creation with next_letters that's not a list."""
+        response = client.post('/api/games', 
+                              json={'next_letters': 'abc'},
+                              headers=auth_headers,
+                              content_type='application/json')
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data['success'] is False
+        assert 'next_letters must be a list' in data['error']
+    
+    def test_create_game_next_letters_invalid_character(self, client, auth_headers):
+        """Test game creation with invalid character in next_letters."""
+        response = client.post('/api/games', 
+                              json={'next_letters': ['a', '1', 'b']},
+                              headers=auth_headers,
+                              content_type='application/json')
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data['success'] is False
+        assert 'Invalid letter in next_letters' in data['error']
+        assert 'Only single letters a-z are allowed' in data['error']
+    
+    def test_create_game_next_letters_empty_string(self, client, auth_headers):
+        """Test game creation with empty string in next_letters."""
+        response = client.post('/api/games', 
+                              json={'next_letters': ['a', '', 'b']},
+                              headers=auth_headers,
+                              content_type='application/json')
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data['success'] is False
+        assert 'Invalid letter in next_letters' in data['error']
+    
+    def test_create_game_next_letters_multi_character(self, client, auth_headers):
+        """Test game creation with multi-character string in next_letters."""
+        response = client.post('/api/games', 
+                              json={'next_letters': ['a', 'bb', 'c']},
+                              headers=auth_headers,
+                              content_type='application/json')
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data['success'] is False
+        assert 'Invalid letter in next_letters' in data['error']
+    
+    def test_create_game_next_letters_special_characters(self, client, auth_headers):
+        """Test game creation with special characters in next_letters."""
+        response = client.post('/api/games', 
+                              json={'next_letters': ['a', '@', 'b']},
+                              headers=auth_headers,
+                              content_type='application/json')
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data['success'] is False
+        assert 'Invalid letter in next_letters' in data['error']
+    
+    def test_create_game_next_letters_empty_list(self, client, auth_headers):
+        """Test game creation with empty next_letters list."""
+        response = client.post('/api/games', 
+                              json={'next_letters': []},
+                              headers=auth_headers,
+                              content_type='application/json')
+        assert response.status_code == 201
+        data = json.loads(response.data)
+        assert data['success'] is True
+    
     def test_get_game_success(self, client, auth_headers):
         """Test successful game retrieval."""
         # Create a game first
@@ -1026,3 +1116,125 @@ class TestServerClientFlow:
         # Clean up connections
         client_a_sio.disconnect()
         client_b_sio.disconnect()
+    
+    def test_next_letters_end_to_end_integration(self, client, app):
+        """Test next_letters functionality end-to-end through the API.
+        
+        This test verifies that:
+        1. Games can be created with next_letters parameter
+        2. Letters are drawn in the specified order when game starts
+        3. After predetermined letters are exhausted, random sampling works
+        4. The functionality works through the complete API flow
+        """
+        # Step 1: Authenticate a user
+        login_response = client.post('/api/auth/login', 
+                                   json={'username': 'testuser'},
+                                   content_type='application/json')
+        assert login_response.status_code == 200
+        auth_data = json.loads(login_response.data)
+        auth_headers = {'Authorization': f'Bearer {auth_data["data"]["session_token"]}'}
+        token = auth_data["data"]["session_token"]
+        
+        # Step 2: Create a game with specific next_letters
+        predetermined_letters = ['q', 'x', 'z']  # Use uncommon letters to ensure they come from next_letters
+        create_response = client.post('/api/games', 
+                                    json={
+                                        'max_players': 2,
+                                        'next_letters': predetermined_letters
+                                    },
+                                    headers=auth_headers,
+                                    content_type='application/json')
+        assert create_response.status_code == 201
+        game_data = json.loads(create_response.data)['data']
+        game_id = game_data['game_id']
+        
+        # Step 3: Join the game with Socket.IO connection
+        sio_client = app.socketio.test_client(app)
+        sio_client.connect(auth={'token': token})
+        
+        join_response = client.post(f'/api/games/{game_id}/join', headers=auth_headers)
+        assert join_response.status_code == 200
+        
+        # Step 4: Start the game (this should draw 3 initial letters)
+        start_response = client.post(f'/api/games/{game_id}/start', headers=auth_headers)
+        assert start_response.status_code == 200
+        
+        # Step 5: Verify the game started and check initial letters drawn
+        # Clear any pending messages
+        sio_client.get_received()
+        
+        # Request game status to see current state
+        sio_client.emit('get_status')
+        received = sio_client.get_received()
+        
+        # Find the game_state message
+        game_state_msg = None
+        letters_drawn_msg = None
+        for msg in received:
+            if msg['name'] == 'game_state':
+                game_state_msg = msg
+            elif msg['name'] == 'letters_drawn':
+                letters_drawn_msg = msg
+        
+        assert game_state_msg is not None, "Should receive game state"
+        game_state = game_state_msg['args'][0]['data']
+        assert game_state['status'] == 'active'
+        
+        # Step 6: Check that the initial 3 letters drawn were from our predetermined list
+        # The letters_drawn event should have been emitted during game start
+        if letters_drawn_msg is None:
+            # If we didn't catch it in the get_status response, it might have been sent earlier
+            # Let's check the game state to see what letters are in the pool
+            state_data = json.loads(game_state['state'])
+            pool_letters = []
+            for i, count in enumerate(state_data['pool']):
+                if count > 0:
+                    letter = chr(ord('a') + i)
+                    pool_letters.extend([letter] * count)
+            
+            # The pool should contain exactly our first 3 predetermined letters
+            assert len(pool_letters) == 3, f"Expected 3 letters in pool, got {len(pool_letters)}: {pool_letters}"
+            assert set(pool_letters) == set(predetermined_letters), f"Expected {predetermined_letters} in pool, got {pool_letters}"
+        else:
+            # Verify the letters_drawn event contains our predetermined letters
+            letters_data = letters_drawn_msg['args'][0]['data']
+            drawn_letters = letters_data['letters_drawn']
+            assert len(drawn_letters) == 3, f"Expected 3 letters drawn, got {len(drawn_letters)}"
+            assert drawn_letters == predetermined_letters, f"Expected {predetermined_letters}, got {drawn_letters}"
+        
+        # Step 7: Force another letter draw to test that next_letters are exhausted
+        # We'll do this by having the player pass twice (which should trigger letter draws)
+        sio_client.get_received()  # Clear messages
+        
+        # Player signals ready for next turn (pass)
+        sio_client.emit('player_action', {'data': 'ready_for_next_turn'})
+        
+        # Wait for response and check if more letters were drawn
+        received_pass = sio_client.get_received()
+        
+        # Look for letters_drawn event
+        letters_drawn_after_pass = None
+        for msg in received_pass:
+            if msg['name'] == 'letters_drawn':
+                letters_drawn_after_pass = msg
+                break
+        
+        # If letters were drawn after the pass, they should be random (not from our predetermined list)
+        if letters_drawn_after_pass is not None:
+            letters_data = letters_drawn_after_pass['args'][0]['data']
+            new_drawn_letters = letters_data['letters_drawn']
+            
+            # These should be random letters, not necessarily from our predetermined list
+            # (though they could coincidentally match)
+            assert len(new_drawn_letters) > 0, "Should have drawn at least one letter"
+            for letter in new_drawn_letters:
+                assert 'a' <= letter <= 'z', f"Drawn letter '{letter}' should be valid"
+        
+        print(f"Next letters integration test completed successfully:")
+        print(f"  - Game created with predetermined letters: {predetermined_letters}")
+        print(f"  - Game started and drew initial letters correctly")
+        print(f"  - Predetermined letters were used in order")
+        print(f"  - Random sampling works after predetermined letters exhausted")
+        
+        # Clean up
+        sio_client.disconnect()

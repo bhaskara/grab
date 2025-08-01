@@ -50,7 +50,7 @@ class GameServer(object):
         game = self.games[game_id]
         return game['state'], game['players'].copy()
 
-    def add_game(self, creator_id=None, creator_username=None, max_players=4, time_limit_seconds=300, game_type='dummy') -> str:
+    def add_game(self, creator_id=None, creator_username=None, max_players=4, time_limit_seconds=300, game_type='dummy', next_letters=None) -> str:
         """Add a new game and return its ID.
 
         For now, IDs are consecutively increasing integers (converted to str).
@@ -70,6 +70,7 @@ class GameServer(object):
             'max_players': max_players,
             'time_limit_seconds': time_limit_seconds,
             'game_type': game_type,
+            'next_letters': next_letters,
             'created_at': datetime.now(timezone.utc).isoformat() + 'Z',
             'started_at': None,
             'finished_at': None
