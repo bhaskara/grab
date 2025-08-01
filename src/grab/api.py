@@ -119,6 +119,7 @@ def create_game():
     
     max_players = data.get('max_players', 4)
     time_limit_seconds = data.get('time_limit_seconds', 300)
+    next_letters = data.get('next_letters')
     
     # Validate parameters
     if not isinstance(max_players, int) or max_players < 1 or max_players > 8:
@@ -127,6 +128,15 @@ def create_game():
     if not isinstance(time_limit_seconds, int) or time_limit_seconds < 30:
         return jsonify({'success': False, 'error': 'Invalid time_limit_seconds (must be >= 30)'}), 400
     
+    # Validate next_letters if provided
+    if next_letters is not None:
+        if not isinstance(next_letters, list):
+            return jsonify({'success': False, 'error': 'next_letters must be a list'}), 400
+        
+        for letter in next_letters:
+            if not isinstance(letter, str) or len(letter) != 1 or not ('a' <= letter.lower() <= 'z'):
+                return jsonify({'success': False, 'error': f'Invalid letter in next_letters: "{letter}". Only single letters a-z are allowed.'}), 400
+    
     # Create game in game server with metadata
     game_type = current_app.config.get('GAME_TYPE', 'dummy')
     game_id = game_server.add_game(
@@ -134,7 +144,8 @@ def create_game():
         creator_username=request.current_user['username'],
         max_players=max_players,
         time_limit_seconds=time_limit_seconds,
-        game_type=game_type
+        game_type=game_type,
+        next_letters=next_letters
     )
     
     game_data = game_server.get_game_metadata(game_id)
@@ -290,7 +301,9 @@ def start_game(game_id):
         game_object = DummyGrab(list(players))
     elif game_type == 'grab':
         from .grab_game import Grab
-        game_object = Grab(num_players=len(players))
+        # Get next_letters from game metadata
+        next_letters = game_data.get('next_letters')
+        game_object = Grab(num_players=len(players), next_letters=next_letters)
         
         if test_letters:
             # For testing: set specific letters in the pool

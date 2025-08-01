@@ -61,6 +61,8 @@ class State(object):
         Scores per player, where scores[i] is the score for player i
     passed: List[bool]
         For each player, whether they have passed since the last letter draw happened.
+    next_letters : List[str]
+        List of letters to be drawn in order before falling back to random sampling
 
     """
     num_players: int
@@ -69,13 +71,15 @@ class State(object):
     bag: np.ndarray
     scores: List[int]
     passed: List[bool]
+    next_letters: List[str]
     
     def __init__(self, num_players: int, 
                  words_per_player: Optional[List[List['Word']]] = None,
                  pool: Optional[np.ndarray] = None,
                  bag: Optional[np.ndarray] = None,
                  scores: Optional[List[int]] = None,
-                 passed: Optional[List[bool]] = None):
+                 passed: Optional[List[bool]] = None,
+                 next_letters: Optional[List[str]] = None):
         """Initialize a new game state.
 
         Parameters
@@ -94,12 +98,15 @@ class State(object):
             Initial scores for each player. If None, creates zero scores for all players.
         passed : List[bool], optional
             Initial passed status for each player. If None, creates False for all players.
+        next_letters : List[str], optional
+            Initial list of letters to be drawn in order before falling back to random 
+            sampling. If None, creates empty list.
 
         Raises
         ------
         ValueError
-            If num_players is less than 1, if arrays have wrong shape, or if list 
-            lengths don't match num_players
+            If num_players is less than 1, if arrays have wrong shape, if list 
+            lengths don't match num_players, or if next_letters contains invalid characters
 
         """
         if num_players < 1:
@@ -141,6 +148,15 @@ class State(object):
             if len(passed) != num_players:
                 raise ValueError(f"passed must have length {num_players}, got {len(passed)}")
             self.passed = passed.copy()
+        
+        if next_letters is None:
+            self.next_letters = []
+        else:
+            # Validate next_letters
+            for letter in next_letters:
+                if not isinstance(letter, str) or len(letter) != 1 or not ('a' <= letter.lower() <= 'z'):
+                    raise ValueError(f"Invalid letter in next_letters: '{letter}'. Only single letters 'a' to 'z' are allowed.")
+            self.next_letters = [letter.lower() for letter in next_letters]
     
 
 @dataclass
