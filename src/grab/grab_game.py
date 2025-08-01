@@ -1,5 +1,6 @@
 from typing import Set, Union, Optional, Tuple
 import os
+import random
 import numpy as np
 from .grab_state import State, Word, MakeWord, DrawLetters, Move
 
@@ -467,7 +468,6 @@ class Grab(object):
                 if not available_letters:
                     raise ValueError("No more letters available in bag for random sampling")
                 
-                import random
                 letter = random.choice(available_letters)
                 drawn_letters.append(letter)
                 letter_idx = ord(letter) - ord('a')

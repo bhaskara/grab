@@ -133,9 +133,12 @@ def create_game():
         if not isinstance(next_letters, list):
             return jsonify({'success': False, 'error': 'next_letters must be a list'}), 400
         
+        validated_letters = []
         for letter in next_letters:
             if not isinstance(letter, str) or len(letter) != 1 or not ('a' <= letter.lower() <= 'z'):
                 return jsonify({'success': False, 'error': f'Invalid letter in next_letters: "{letter}". Only single letters a-z are allowed.'}), 400
+            validated_letters.append(letter.lower())
+        next_letters = validated_letters
     
     # Create game in game server with metadata
     game_type = current_app.config.get('GAME_TYPE', 'dummy')
