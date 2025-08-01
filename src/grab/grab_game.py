@@ -196,7 +196,8 @@ class Grab(object):
                 pool=current_state.pool.copy(),
                 bag=current_state.bag.copy(),
                 scores=current_state.scores.copy(),
-                passed=current_state.passed.copy()
+                passed=current_state.passed.copy(),
+                next_letters=current_state.next_letters.copy()
             )
             
             # Mark this player as passed
@@ -342,7 +343,8 @@ class Grab(object):
                     pool=pool_counts - remaining_counts,  # Efficient pool update
                     bag=state.bag.copy(),
                     scores=state.scores.copy(),
-                    passed=state.passed.copy()
+                    passed=state.passed.copy(),
+                    next_letters=state.next_letters.copy()
                 )
                 
                 # Remove used words efficiently using stored indices (in reverse order)
@@ -385,7 +387,8 @@ class Grab(object):
             pool=state.pool.copy(),
             bag=state.bag.copy(),
             scores=state.scores.copy(),
-            passed=state.passed.copy()
+            passed=state.passed.copy(),
+            next_letters=state.next_letters.copy()
         )
         
         # Add bonus scores for each player based on their remaining words
