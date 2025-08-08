@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
+import GameLobby from './GameLobby';
 import './App.css';
 
 function App() {
@@ -10,6 +11,8 @@ function App() {
   const [authToken, setAuthToken] = useState(null);
   const [username, setUsername] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentGameId, setCurrentGameId] = useState(null);
+  const [showLobby, setShowLobby] = useState(false);
 
   // Generate random username on component mount
   useEffect(() => {
@@ -101,6 +104,8 @@ function App() {
 
     newSocket.on('connected', (data) => {
       console.log('Server confirmed connection:', data);
+      // After successful socket connection, show the lobby
+      setShowLobby(true);
     });
 
     setSocket(newSocket);
@@ -114,13 +119,67 @@ function App() {
     }
     setConnected(false);
     setConnectionStatus('Disconnected');
+    setShowLobby(false);
+    setCurrentGameId(null);
   };
 
+  const handleGameJoined = (gameId, joinData) => {
+    setCurrentGameId(gameId);
+    console.log('Joined game:', gameId, joinData);
+    // TODO: Switch to game view in Step 4
+  };
+
+  // Show lobby if connected and authenticated
+  if (showLobby && connected && isLoggedIn) {
+    return (
+      <div className="App">
+        <header className="App-header">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div>
+              <h1>🎮 Grab Game - Web Frontend</h1>
+              <p>Step 3: Lobby Interface ✅</p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ color: '#aaa', fontSize: '14px' }}>
+                Logged in as: <strong>{username}</strong>
+              </div>
+              <div style={{ color: 'lime', fontSize: '12px' }}>
+                ● Connected to {serverUrl}
+              </div>
+              <button 
+                onClick={disconnect}
+                style={{ 
+                  padding: '6px 12px', 
+                  fontSize: '12px', 
+                  backgroundColor: '#dc3545',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  marginTop: '5px'
+                }}
+              >
+                Disconnect
+              </button>
+            </div>
+          </div>
+          
+          <GameLobby 
+            serverUrl={serverUrl}
+            authToken={authToken}
+            onGameJoined={handleGameJoined}
+          />
+        </header>
+      </div>
+    );
+  }
+
+  // Show authentication/connection flow
   return (
     <div className="App">
       <header className="App-header">
         <h1>🎮 Grab Game - Web Frontend</h1>
-        <p>Step 1: React Setup + Socket.IO with Authentication</p>
+        <p>Step 3: Lobby Interface</p>
         
         <div style={{ margin: '20px', padding: '20px', background: '#444', borderRadius: '8px' }}>
           <p><strong>Server URL:</strong> <code>{serverUrl || 'Loading...'}</code></p>
@@ -159,7 +218,7 @@ function App() {
         </div>
 
         <div style={{ marginTop: '30px', fontSize: '14px', textAlign: 'left', maxWidth: '600px' }}>
-          <h3>✅ Step 1 Complete - Authentication & Socket.IO Working!</h3>
+          <h3>Progress Checklist</h3>
           <ul>
             <li>✅ React app created and running</li>
             <li>✅ Socket.IO client library installed</li>
@@ -167,11 +226,12 @@ function App() {
             <li>✅ HTTP API authentication working</li>
             <li>✅ CORS configured for cross-origin requests</li>
             <li>{connected ? '✅' : '⏳'} Socket.IO connection with JWT auth</li>
+            <li>{showLobby ? '✅' : '⏳'} Game lobby interface</li>
           </ul>
           
           <div style={{ marginTop: '20px', padding: '10px', background: '#333', borderRadius: '4px' }}>
-            <strong>Ready for Step 2:</strong> Authentication + Socket Connection ✅<br/>
-            <strong>Next:</strong> Step 3 - Lobby Interface (create/join games)
+            <strong>Current Step:</strong> Step 3 - Lobby Interface<br/>
+            <strong>Next:</strong> {showLobby ? 'Step 4 - Game Interface' : 'Complete authentication and connection'}
           </div>
         </div>
       </header>
