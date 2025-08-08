@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 import GameLobby from './GameLobby';
+import GameInterface from './GameInterface';
 import './App.css';
 
 function App() {
@@ -13,6 +14,10 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentGameId, setCurrentGameId] = useState(null);
   const [showLobby, setShowLobby] = useState(false);
+  const [gameState, setGameState] = useState(null);
+  const [inGame, setInGame] = useState(false);
+  const [gameEvents, setGameEvents] = useState([]);
+  const [gameCreator, setGameCreator] = useState(null);
 
   // Generate random username on component mount
   useEffect(() => {
@@ -108,6 +113,80 @@ function App() {
       setShowLobby(true);
     });
 
+    // Game state updates
+    newSocket.on('game_state', (data) => {
+      console.log('Game state update:', data);
+      setGameState(data.data);
+      setInGame(true);
+      setShowLobby(false);
+    });
+
+    // Move results
+    newSocket.on('move_result', (data) => {
+      console.log('Move result:', data);
+      if (data.success && data.game_state) {
+        setGameState(data.game_state);
+        addGameEvent('success', 'Move successful!');
+      } else if (data.error) {
+        addGameEvent('error', `Move failed: ${data.error}`);
+      }
+    });
+
+    // Player connection events
+    newSocket.on('player_disconnected', (data) => {
+      console.log('Player disconnected:', data);
+      addGameEvent('connection', `${data.player} disconnected`);
+    });
+
+    newSocket.on('player_reconnected', (data) => {
+      console.log('Player reconnected:', data);
+      addGameEvent('connection', `${data.player} reconnected`);
+    });
+
+    // Game ended event
+    newSocket.on('game_ended', (data) => {
+      console.log('Game ended:', data);
+      addGameEvent('game_event', `Game ended by ${data.ended_by}: ${data.reason}`);
+      setInGame(false);
+      setGameState(null);
+      setCurrentGameId(null);
+      setShowLobby(true);
+    });
+
+    // Turn progression events
+    newSocket.on('turn_starting', (data) => {
+      console.log('Turn starting:', data);
+      const letters = data.letters_drawn ? data.letters_drawn.join(', ').toUpperCase() : 'none';
+      addGameEvent('game_event', `Turn ${data.turn_number} starting! New letters: ${letters} (${data.letters_remaining_in_bag} left in bag)`);
+      if (data.time_limit) {
+        addGameEvent('system', `Turn timer: ${data.time_limit} seconds`);
+      }
+    });
+
+    newSocket.on('turn_ending', (data) => {
+      console.log('Turn ending:', data);
+      const reason = data.reason === 'all_players_passed' ? 'All players passed' : 'Time expired';
+      addGameEvent('game_event', `Turn ${data.turn_number} ended: ${reason} (${data.final_moves_count} moves made)`);
+    });
+
+    newSocket.on('game_ending', (data) => {
+      console.log('Game ending:', data);
+      const reason = data.reason === 'bag_empty' ? 'All letters used' : 'Game stopped by creator';
+      addGameEvent('game_event', `Game ending: ${reason}`);
+      
+      if (data.final_scores) {
+        const scores = Object.entries(data.final_scores)
+          .sort(([,a], [,b]) => b - a)
+          .map(([player, score]) => `${player}: ${score}`)
+          .join(', ');
+        addGameEvent('success', `Final scores: ${scores}`);
+        
+        if (data.winner) {
+          addGameEvent('success', `🏆 Winner: ${data.winner}!`);
+        }
+      }
+    });
+
     setSocket(newSocket);
     newSocket.connect();
   };
@@ -121,13 +200,62 @@ function App() {
     setConnectionStatus('Disconnected');
     setShowLobby(false);
     setCurrentGameId(null);
+    setGameState(null);
+    setInGame(false);
+    setGameEvents([]);
+    setGameCreator(null);
   };
 
   const handleGameJoined = (gameId, joinData) => {
     setCurrentGameId(gameId);
     console.log('Joined game:', gameId, joinData);
-    // TODO: Switch to game view in Step 4
+    // Game state will be received via game_state socket event
+    // which will automatically switch to game view
   };
+
+  const handleGameCreated = (gameId) => {
+    console.log('Created game:', gameId);
+    // Track that current user created this game
+    setGameCreator(username);
+  };
+
+  const handleLeaveGame = () => {
+    setInGame(false);
+    setGameState(null);
+    setCurrentGameId(null);
+    setGameEvents([]);
+    setGameCreator(null);
+    setShowLobby(true);
+  };
+
+  // Helper function to add game events
+  const addGameEvent = (type, text) => {
+    const event = {
+      timestamp: Date.now(),
+      type: type,
+      text: text
+    };
+    setGameEvents(prev => [...prev, event]);
+  };
+
+  // Show game interface if in a game
+  if (inGame && gameState && connected && isLoggedIn) {
+    return (
+      <div className="App">
+        <GameInterface 
+          gameState={gameState}
+          socket={socket}
+          currentUsername={username}
+          authToken={authToken}
+          serverUrl={serverUrl}
+          gameEvents={gameEvents}
+          gameCreator={gameCreator}
+          onAddGameEvent={addGameEvent}
+          onLeaveGame={handleLeaveGame}
+        />
+      </div>
+    );
+  }
 
   // Show lobby if connected and authenticated
   if (showLobby && connected && isLoggedIn) {
@@ -137,7 +265,7 @@ function App() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <div>
               <h1>🎮 Grab Game - Web Frontend</h1>
-              <p>Step 3: Lobby Interface ✅</p>
+              <p>Step 4: Terminal-like Game Interface ✅</p>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ color: '#aaa', fontSize: '14px' }}>
@@ -168,6 +296,7 @@ function App() {
             serverUrl={serverUrl}
             authToken={authToken}
             onGameJoined={handleGameJoined}
+            onGameCreated={handleGameCreated}
           />
         </header>
       </div>
@@ -179,7 +308,7 @@ function App() {
     <div className="App">
       <header className="App-header">
         <h1>🎮 Grab Game - Web Frontend</h1>
-        <p>Step 3: Lobby Interface</p>
+        <p>Step 4: Terminal-like Game Interface</p>
         
         <div style={{ margin: '20px', padding: '20px', background: '#444', borderRadius: '8px' }}>
           <p><strong>Server URL:</strong> <code>{serverUrl || 'Loading...'}</code></p>
@@ -227,11 +356,12 @@ function App() {
             <li>✅ CORS configured for cross-origin requests</li>
             <li>{connected ? '✅' : '⏳'} Socket.IO connection with JWT auth</li>
             <li>{showLobby ? '✅' : '⏳'} Game lobby interface</li>
+            <li>{inGame ? '✅' : '⏳'} Terminal-like game interface</li>
           </ul>
           
           <div style={{ marginTop: '20px', padding: '10px', background: '#333', borderRadius: '4px' }}>
-            <strong>Current Step:</strong> Step 3 - Lobby Interface<br/>
-            <strong>Next:</strong> {showLobby ? 'Step 4 - Game Interface' : 'Complete authentication and connection'}
+            <strong>Current Step:</strong> Step 4 - Terminal-like Game Interface<br/>
+            <strong>Next:</strong> {inGame ? 'Step 5 - Real-time Features' : (showLobby ? 'Join a game to test' : 'Complete authentication and connection')}
           </div>
         </div>
       </header>

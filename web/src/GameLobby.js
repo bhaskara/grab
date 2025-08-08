@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 
-function GameLobby({ serverUrl, authToken, onGameJoined }) {
+function GameLobby({ serverUrl, authToken, onGameJoined, onGameCreated }) {
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -63,7 +63,10 @@ function GameLobby({ serverUrl, authToken, onGameJoined }) {
 
       const result = await response.json();
       if (result.success) {
-        // Refresh games list to show the new game
+        // Notify parent about game creation and refresh games list
+        if (onGameCreated) {
+          onGameCreated(result.data.game_id);
+        }
         await fetchGames();
       } else {
         setError(result.error || 'Failed to create game');
