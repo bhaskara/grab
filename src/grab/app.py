@@ -7,6 +7,7 @@ with WebSocket support for real-time game communication.
 
 from flask import Flask
 from flask_socketio import SocketIO
+from flask_cors import CORS
 from loguru import logger
 
 def create_app(config=None):
@@ -40,6 +41,9 @@ def create_app(config=None):
     
     if config:
         app.config.update(config)
+    
+    # Enable CORS for all HTTP requests
+    CORS(app, origins="*")
     
     # Initialize SocketIO for WebSocket support
     socketio = SocketIO(app, cors_allowed_origins="*")

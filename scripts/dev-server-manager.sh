@@ -113,9 +113,62 @@ setup_firewall() {
     sudo ufw status numbered
 }
 
+# Function to clean up existing React dev server processes
+cleanup_existing_react_processes() {
+    print_status "Checking for existing React dev server processes..."
+    
+    # Find processes running react-scripts start
+    local existing_pids=$(ps aux | grep "react-scripts.*start" | grep -v grep | awk '{print $2}')
+    
+    if [ -n "$existing_pids" ]; then
+        print_warning "Found existing React dev server processes. Cleaning up..."
+        
+        for pid in $existing_pids; do
+            if kill -0 $pid 2>/dev/null; then
+                print_status "Stopping React process (PID: $pid)"
+                kill $pid 2>/dev/null || true
+                
+                # Wait a moment for graceful shutdown
+                sleep 2
+                
+                # Force kill if still running
+                if kill -0 $pid 2>/dev/null; then
+                    print_status "Force stopping React process (PID: $pid)"
+                    kill -9 $pid 2>/dev/null || true
+                fi
+            fi
+        done
+        
+        # Also clean up any processes holding port 3000
+        local port_pids=$(ss -tlnp | grep ":$REACT_PORT " | grep -o "pid=[0-9]*" | cut -d= -f2)
+        if [ -n "$port_pids" ]; then
+            for pid in $port_pids; do
+                if kill -0 $pid 2>/dev/null; then
+                    print_status "Stopping process holding port $REACT_PORT (PID: $pid)"
+                    kill $pid 2>/dev/null || true
+                    sleep 1
+                    # Force kill if needed
+                    if kill -0 $pid 2>/dev/null; then
+                        kill -9 $pid 2>/dev/null || true
+                    fi
+                fi
+            done
+        fi
+        
+        # Wait a moment for port to be released
+        sleep 2
+        print_success "Cleanup completed"
+    else
+        print_status "No existing React processes found"
+    fi
+}
+
 # Function to start the development servers
 start_servers() {
     print_status "Starting development servers..."
+    
+    # Clean up any existing React dev server processes first
+    cleanup_existing_react_processes
     
     # Check if web directory exists
     if [ ! -d "$WEB_DIR" ]; then
@@ -160,16 +213,8 @@ start_servers() {
 stop_servers() {
     print_status "Stopping development servers..."
     
-    if [ -n "$NPM_PID" ] && kill -0 $NPM_PID 2>/dev/null; then
-        print_status "Stopping React dev server (PID: $NPM_PID)..."
-        kill $NPM_PID
-        wait $NPM_PID 2>/dev/null || true
-        print_success "React dev server stopped"
-    else
-        # Try to kill any remaining npm/node processes for this project
-        pkill -f "react-scripts start" 2>/dev/null || true
-        print_status "Cleaned up any remaining React dev server processes"
-    fi
+    # Use our comprehensive cleanup function
+    cleanup_existing_react_processes
     
     NPM_PID=""
 }
@@ -237,7 +282,7 @@ handle_status() {
     fi
     
     # Check Flask server
-    if netstat -ln 2>/dev/null | grep -q ":$FLASK_PORT "; then
+    if ss -tlnp | grep -q ":$FLASK_PORT "; then
         print_success "Flask server: RUNNING on port $FLASK_PORT"
         echo -e "  External URL: ${GREEN}http://$SERVER_IP:$FLASK_PORT${NC}"
     else

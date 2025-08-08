@@ -18,18 +18,19 @@ This script (`dev-server-manager.sh`) manages the React development server and f
 
 ## What it does when you type "start":
 
-1. **Backs up current firewall configuration**
-2. **Opens firewall ports:**
+1. **Cleans up existing React processes** to prevent port conflicts
+2. **Backs up current firewall configuration**
+3. **Opens firewall ports:**
    - Port 3000 (React dev server)
    - Port 5000 (Flask game server)
-3. **Starts React dev server** bound to all interfaces (0.0.0.0)
-4. **Displays connection URLs** for your external laptop:
+4. **Starts React dev server** bound to all interfaces (0.0.0.0)
+5. **Displays connection URLs** for your external laptop:
    - React App: `http://165.232.153.59:3000`
    - Flask Server: `http://165.232.153.59:5000`
 
 ## What it does when you type "stop":
 
-1. **Stops the React dev server**
+1. **Thoroughly cleans up all React dev server processes**
 2. **Restores original firewall settings**
 3. **Cleans up temporary files**
 

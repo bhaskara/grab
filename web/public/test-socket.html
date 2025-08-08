@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket.IO Connection Test</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #282c34; color: white; }
+        .status { margin: 20px 0; padding: 10px; border-radius: 5px; }
+        .connected { background: #4CAF50; }
+        .disconnected { background: #f44336; }
+        .connecting { background: #ff9800; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Socket.IO Connection Test</h1>
+    
+    <div id="server-url">
+        <strong>Server URL:</strong> <span id="url"></span>
+    </div>
+    
+    <div id="status" class="status disconnected">
+        <strong>Status:</strong> <span id="status-text">Disconnected</span>
+    </div>
+    
+    <div style="margin: 20px 0;">
+        <input type="text" id="username" placeholder="Enter username" value="webuser456" style="padding: 8px; margin-right: 10px; color: black;">
+        <button onclick="login()">1. Login First</button>
+        <button onclick="testConnection()">2. Test Connection</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+    
+    <div id="token-info" style="margin: 10px 0; font-size: 12px;">
+        <strong>Auth Token:</strong> <span id="token-display">None</span>
+    </div>
+    
+    <div id="logs" style="margin-top: 20px; padding: 10px; background: #1e1e1e; border-radius: 5px; height: 200px; overflow-y: auto;">
+        <strong>Connection Log:</strong><br>
+    </div>
+
+    <script>
+        let socket = null;
+        let authToken = null;
+        
+        // Determine server URL dynamically
+        const serverUrl = window.location.hostname === 'localhost' 
+            ? 'http://localhost:5000'
+            : `http://${window.location.hostname}:5000`;
+        
+        document.getElementById('url').textContent = serverUrl;
+        log(`Configured to connect to: ${serverUrl}`);
+        
+        function log(message) {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            logs.innerHTML += `<br>${timestamp}: ${message}`;
+            logs.scrollTop = logs.scrollHeight;
+            console.log(message);
+        }
+        
+        async function login() {
+            const username = document.getElementById('username').value.trim();
+            if (!username) {
+                log('❌ Please enter a username');
+                return;
+            }
+            
+            log(`🔐 Attempting login for user: ${username}`);
+            
+            try {
+                const response = await fetch(`${serverUrl}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    log(`❌ Login failed: ${response.status} ${errorText}`);
+                    return;
+                }
+                
+                const result = await response.json();
+                if (result.success) {
+                    authToken = result.data.session_token;
+                    document.getElementById('token-display').textContent = authToken.substring(0, 20) + '...';
+                    log(`✅ Login successful for ${username}`);
+                    log(`🔑 Got auth token: ${authToken.substring(0, 20)}...`);
+                } else {
+                    log(`❌ Login failed: ${result.error}`);
+                }
+            } catch (error) {
+                log(`❌ Login error: ${error.message}`);
+            }
+        }
+        
+        function updateStatus(status, className) {
+            const statusDiv = document.getElementById('status');
+            const statusText = document.getElementById('status-text');
+            statusDiv.className = `status ${className}`;
+            statusText.textContent = status;
+        }
+        
+        function testConnection() {
+            if (!authToken) {
+                log('❌ Please login first to get an auth token');
+                return;
+            }
+            
+            if (socket) {
+                socket.disconnect();
+            }
+            
+            log(`Attempting to connect to ${serverUrl} with auth token...`);
+            updateStatus('Connecting...', 'connecting');
+            
+            socket = io(serverUrl, {
+                auth: { token: authToken },
+                transports: ['polling', 'websocket'],
+                timeout: 5000
+            });
+            
+            socket.on('connect', () => {
+                log('✅ Connected successfully!');
+                updateStatus('Connected', 'connected');
+            });
+            
+            socket.on('disconnect', (reason) => {
+                log(`❌ Disconnected: ${reason}`);
+                updateStatus('Disconnected', 'disconnected');
+            });
+            
+            socket.on('connect_error', (error) => {
+                log(`❌ Connection Error: ${error.message}`);
+                updateStatus(`Connection Error: ${error.message}`, 'disconnected');
+            });
+            
+            socket.on('error', (error) => {
+                log(`❌ Socket Error: ${error}`);
+                updateStatus(`Error: ${error}`, 'disconnected');
+            });
+        }
+        
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+                log('🔌 Manually disconnected');
+                updateStatus('Disconnected', 'disconnected');
+            }
+        }
+        
+        // Auto-login on page load (but don't auto-connect)
+        setTimeout(() => {
+            log('👋 Ready to test! Click "1. Login First" then "2. Test Connection"');
+        }, 500);
+    </script>
+</body>
+</html>
