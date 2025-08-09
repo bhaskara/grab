@@ -31,8 +31,7 @@ function LetterPool({ pool }) {
       for (let i = 0; i < count; i++) {
         letters.push({
           letter: letter,
-          points: points,
-          key: `${letter}-${i}` // Unique key for React rendering
+          points: points
         });
       }
     }
@@ -47,9 +46,9 @@ function LetterPool({ pool }) {
             Pool is empty - waiting for next letter draw
           </div>
         ) : (
-          letters.map(({ letter, points, key }) => (
+          letters.map(({ letter, points }, index) => (
             <div 
-              key={key} 
+              key={`${letter}-${index}`} 
               className="letter-tile"
               style={{
                 position: 'relative',
@@ -100,7 +99,7 @@ function LetterPool({ pool }) {
           color: '#aaa',
           textAlign: 'center'
         }}>
-          {letters.length} total tiles
+          {new Set(letters.map(l => l.letter)).size} different letters • {letters.length} total tiles
         </div>
       )}
     </div>
