@@ -21,16 +21,20 @@ function LetterPool({ pool }) {
     );
   }
 
-  // Convert pool array [1, 0, 2, 0, 1, ...] to letter objects
+  // Convert pool array [1, 0, 2, 0, 1, ...] to individual letter tiles
   const letters = [];
   pool.forEach((count, index) => {
     if (count > 0) {
       const letter = String.fromCharCode(97 + index); // 'a' + index
-      letters.push({
-        letter: letter,
-        count: count,
-        points: LETTER_POINTS[letter] || 1
-      });
+      const points = LETTER_POINTS[letter] || 1;
+      // Create individual tiles for each copy of the letter
+      for (let i = 0; i < count; i++) {
+        letters.push({
+          letter: letter,
+          points: points,
+          key: `${letter}-${i}` // Unique key for React rendering
+        });
+      }
     }
   });
 
@@ -43,9 +47,9 @@ function LetterPool({ pool }) {
             Pool is empty - waiting for next letter draw
           </div>
         ) : (
-          letters.map(({ letter, count, points }) => (
+          letters.map(({ letter, points, key }) => (
             <div 
-              key={letter} 
+              key={key} 
               className="letter-tile"
               style={{
                 position: 'relative',
@@ -85,28 +89,6 @@ function LetterPool({ pool }) {
               >
                 {points}
               </div>
-              {count > 1 && (
-                <div 
-                  className="letter-count" 
-                  style={{ 
-                    position: 'absolute',
-                    top: '-8px',
-                    right: '-8px',
-                    backgroundColor: '#dc3545',
-                    color: '#fff',
-                    borderRadius: '50%',
-                    width: '18px',
-                    height: '18px',
-                    fontSize: '11px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  {count}
-                </div>
-              )}
             </div>
           ))
         )}
@@ -118,7 +100,7 @@ function LetterPool({ pool }) {
           color: '#aaa',
           textAlign: 'center'
         }}>
-          {letters.length} different letters • {letters.reduce((sum, l) => sum + l.count, 0)} total tiles
+          {letters.length} total tiles
         </div>
       )}
     </div>
