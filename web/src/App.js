@@ -34,57 +34,7 @@ function App() {
     console.log('Generated random username:', randomUsername);
   }, []);
 
-  const login = async () => {
-    if (!username) return;
-    
-    setConnectionStatus('Logging in...');
-    
-    try {
-      const response = await fetch(`${serverUrl}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ username })
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        setConnectionStatus(`Login failed: ${response.status}`);
-        return;
-      }
-      
-      const result = await response.json();
-      if (result.success) {
-        setAuthToken(result.data.session_token);
-        setIsLoggedIn(true);
-        setConnectionStatus('Logged in - ready to connect');
-        console.log('Login successful for', username);
-      } else {
-        setConnectionStatus(`Login failed: ${result.error}`);
-      }
-    } catch (error) {
-      setConnectionStatus(`Login error: ${error.message}`);
-    }
-  };
-
-  const connectSocket = () => {
-    if (!authToken) {
-      setConnectionStatus('Please login first');
-      return;
-    }
-    
-    if (socket) {
-      socket.disconnect();
-    }
-    
-    setConnectionStatus('Connecting...');
-    
-    const newSocket = io(serverUrl, {
-      auth: { token: authToken },
-      autoConnect: false
-    });
-
+  const setupSocketHandlers = (newSocket) => {
     newSocket.on('connect', () => {
       setConnected(true);
       setConnectionStatus('Connected successfully!');
@@ -186,9 +136,76 @@ function App() {
         }
       }
     });
+  };
 
-    setSocket(newSocket);
-    newSocket.connect();
+  const connectSocketOnly = (token) => {
+    setConnectionStatus('Connecting to game server...');
+    
+    if (socket) {
+      socket.disconnect();
+    }
+    
+    try {
+      const newSocket = io(serverUrl, {
+        auth: { token: token },
+        autoConnect: false
+      });
+
+      setupSocketHandlers(newSocket);
+      setSocket(newSocket);
+      newSocket.connect();
+      
+    } catch (error) {
+      setConnectionStatus(`Connection error: ${error.message}`);
+    }
+  };
+
+  const loginAndConnect = async () => {
+    if (!username) return;
+    
+    // Short-circuit: if already logged in but disconnected, just reconnect
+    if (isLoggedIn && authToken && !connected) {
+      console.log('Already logged in, reconnecting with existing token');
+      connectSocketOnly(authToken);
+      return;
+    }
+    
+    // Step 1: Login to get auth token
+    setConnectionStatus('Logging in...');
+    
+    try {
+      const response = await fetch(`${serverUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ username })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        setConnectionStatus(`Login failed: ${response.status}`);
+        return;
+      }
+      
+      const result = await response.json();
+      if (!result.success) {
+        setConnectionStatus(`Login failed: ${result.error}`);
+        return;
+      }
+
+      // Login successful, set auth token and update state
+      const token = result.data.session_token;
+      setAuthToken(token);
+      setIsLoggedIn(true);
+      console.log('Login successful for', username);
+      
+      // Step 2: Immediately connect to Socket.IO
+      connectSocketOnly(token);
+      
+    } catch (error) {
+      setConnectionStatus(`Login error: ${error.message}`);
+    }
   };
 
   const disconnect = () => {
@@ -204,6 +221,8 @@ function App() {
     setInGame(false);
     setGameEvents([]);
     setGameCreator(null);
+    // Keep isLoggedIn and authToken for potential reconnection
+    // They will be cleared on page refresh or explicit logout
   };
 
   const handleGameJoined = (gameId, joinData) => {
@@ -322,19 +341,12 @@ function App() {
         </div>
         
         <div style={{ margin: '20px' }}>
-          {!isLoggedIn ? (
+          {(!isLoggedIn || !connected) ? (
             <button 
-              onClick={login}
+              onClick={loginAndConnect}
               style={{ padding: '12px 24px', fontSize: '16px', marginRight: '10px' }}
             >
-              1. Login as {username}
-            </button>
-          ) : !connected ? (
-            <button 
-              onClick={connectSocket}
-              style={{ padding: '12px 24px', fontSize: '16px', marginRight: '10px' }}
-            >
-              2. Connect to Socket.IO
+              🎮 Join Game Lobby as {username}
             </button>
           ) : (
             <button 
@@ -361,7 +373,7 @@ function App() {
           
           <div style={{ marginTop: '20px', padding: '10px', background: '#333', borderRadius: '4px' }}>
             <strong>Current Step:</strong> Step 4 - Terminal-like Game Interface<br/>
-            <strong>Next:</strong> {inGame ? 'Step 5 - Real-time Features' : (showLobby ? 'Join a game to test' : 'Complete authentication and connection')}
+            <strong>Next:</strong> {inGame ? 'Step 5 - Real-time Features' : (showLobby ? 'Join a game to test' : 'Click the button above to join the game lobby')}
           </div>
         </div>
       </header>
