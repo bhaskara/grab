@@ -31,16 +31,20 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername, au
     // Handle different commands
     if (command === '!ready' || command === '!r' || command === '!pass') {
       onPass();
-    } else if (command === '!end') {
+    } else if (command === '!end' || command === '!e') {
       handleEndGame();
     } else if (command === '!help') {
       // Help will be handled by GameLog
-      console.log('Help command - commands: word, !ready, !r, !end, !help');
+      if (onAddGameEvent) {
+        onAddGameEvent('system', 'Commands: word (letters only), !ready/!r, !end/!e, !help');
+      }
     } else if (command.match(/^[a-z]+$/)) {
       // Valid word (only lowercase letters)
       onSubmitWord(command);
     } else {
-      console.log('Invalid command. Use: word (letters only), !ready, !r, !end, !help');
+      if (onAddGameEvent) {
+        onAddGameEvent('error', 'Invalid command. Use: word (letters only), !ready/!r, !end/!e, !help');
+      }
     }
     
     setInput('');
@@ -198,7 +202,7 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername, au
         <div><strong>Commands:</strong></div>
         <div>• <code>word</code> - Make a word (letters a-z only)</div>
         <div>• <code>!ready</code>, <code>!r</code>, or <code>!pass</code> - Ready for next turn</div>
-        <div>• <code>!end</code> - End the game (creator only)</div>
+        <div>• <code>!end</code> or <code>!e</code> - End the game (creator only)</div>
         <div>• <code>!help</code> - Show help information</div>
         <div>• <kbd>↑↓</kbd> - Navigate command history</div>
       </div>
