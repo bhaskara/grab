@@ -34,46 +34,14 @@ function App() {
     console.log('Generated random username:', randomUsername);
   }, []);
 
-  const loginAndConnect = async () => {
-    if (!username) return;
+  const connectSocketOnly = (token) => {
+    setConnectionStatus('Connecting to game server...');
     
-    setConnectionStatus('Logging in...');
+    if (socket) {
+      socket.disconnect();
+    }
     
-    // Step 1: Login to get auth token
     try {
-      const response = await fetch(`${serverUrl}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ username })
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        setConnectionStatus(`Login failed: ${response.status}`);
-        return;
-      }
-      
-      const result = await response.json();
-      if (!result.success) {
-        setConnectionStatus(`Login failed: ${result.error}`);
-        return;
-      }
-
-      // Login successful, set auth token and update state
-      const token = result.data.session_token;
-      setAuthToken(token);
-      setIsLoggedIn(true);
-      console.log('Login successful for', username);
-      
-      // Step 2: Immediately connect to Socket.IO
-      setConnectionStatus('Connecting to game server...');
-      
-      if (socket) {
-        socket.disconnect();
-      }
-      
       const newSocket = io(serverUrl, {
         auth: { token: token },
         autoConnect: false
@@ -185,11 +153,55 @@ function App() {
       newSocket.connect();
       
     } catch (error) {
-      if (isLoggedIn) {
-        setConnectionStatus(`Connection error: ${error.message}`);
-      } else {
-        setConnectionStatus(`Login error: ${error.message}`);
+      setConnectionStatus(`Connection error: ${error.message}`);
+    }
+  };
+
+  const loginAndConnect = async () => {
+    if (!username) return;
+    
+    // Short-circuit: if already logged in but disconnected, just reconnect
+    if (isLoggedIn && authToken && !connected) {
+      console.log('Already logged in, reconnecting with existing token');
+      connectSocketOnly(authToken);
+      return;
+    }
+    
+    // Step 1: Login to get auth token
+    setConnectionStatus('Logging in...');
+    
+    try {
+      const response = await fetch(`${serverUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ username })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        setConnectionStatus(`Login failed: ${response.status}`);
+        return;
       }
+      
+      const result = await response.json();
+      if (!result.success) {
+        setConnectionStatus(`Login failed: ${result.error}`);
+        return;
+      }
+
+      // Login successful, set auth token and update state
+      const token = result.data.session_token;
+      setAuthToken(token);
+      setIsLoggedIn(true);
+      console.log('Login successful for', username);
+      
+      // Step 2: Immediately connect to Socket.IO
+      connectSocketOnly(token);
+      
+    } catch (error) {
+      setConnectionStatus(`Login error: ${error.message}`);
     }
   };
 
