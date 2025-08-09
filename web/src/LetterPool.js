@@ -1,6 +1,6 @@
 /**
  * LetterPool component displays the available letters in the game pool.
- * Shows letter tiles with their counts and point values from Scrabble scoring.
+ * Shows individual letter tiles with their point values from Scrabble scoring.
  */
 import React from 'react';
 
