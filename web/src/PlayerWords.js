@@ -11,7 +11,7 @@ const LETTER_POINTS = {
   'u': 1, 'v': 4, 'w': 4, 'x': 8, 'y': 4, 'z': 10
 };
 
-function PlayerWords({ players, gameState, currentUsername }) {
+function PlayerWords({ players, gameState, currentUsername, finalScores = null }) {
   if (!players || !gameState) {
     return (
       <div className="player-words" style={{ padding: '15px', backgroundColor: '#222', borderRadius: '8px', margin: '10px 0' }}>
@@ -51,7 +51,10 @@ function PlayerWords({ players, gameState, currentUsername }) {
         {playerNames.map((username, playerIndex) => {
           const playerData = players[username];
           const playerWords = wordsPerPlayer[playerIndex] || [];
-          const playerScore = scores[playerIndex] || playerData?.score || 0;
+          // Use final scores if available (game ended), otherwise use current scores
+          const playerScore = finalScores 
+            ? (finalScores[username] || 0)
+            : (scores[playerIndex] || playerData?.score || 0);
           const isCurrentPlayer = username === currentUsername;
           const isConnected = playerData?.connected !== false;
           

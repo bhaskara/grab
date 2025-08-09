@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 import GameLobby from './GameLobby';
 import GameInterface from './GameInterface';
+import GameOverScreen from './GameOverScreen';
 import './App.css';
 
 function App() {
@@ -18,6 +19,8 @@ function App() {
   const [inGame, setInGame] = useState(false);
   const [gameEvents, setGameEvents] = useState([]);
   const [gameCreator, setGameCreator] = useState(null);
+  const [showGameOver, setShowGameOver] = useState(false);
+  const [gameOverData, setGameOverData] = useState(null);
 
   // Generate random username on component mount
   useEffect(() => {
@@ -124,17 +127,31 @@ function App() {
       const reason = data.reason === 'bag_empty' ? 'All letters used' : 'Game stopped by creator';
       addGameEvent('game_event', `Game ending: ${reason}`);
       
-      if (data.final_scores) {
-        const scores = Object.entries(data.final_scores)
-          .sort(([,a], [,b]) => b - a)
-          .map(([player, score]) => `${player}: ${score}`)
-          .join(', ');
-        addGameEvent('success', `Final scores: ${scores}`);
-        
-        if (data.winner) {
-          addGameEvent('success', `🏆 Winner: ${data.winner}!`);
-        }
+      // Show game over screen with final data
+      setGameOverData({
+        reason: reason,
+        final_scores: data.final_scores || {},
+        winner: data.winner || null,
+        final_game_state: data.final_game_state || gameState
+      });
+      setShowGameOver(true);
+      
+      // Update game state with final scores if provided
+      if (data.final_game_state) {
+        setGameState(data.final_game_state);
       }
+      
+      // Auto-return to lobby after 5 seconds
+      setTimeout(() => {
+        setShowGameOver(false);
+        setGameOverData(null);
+        setInGame(false);
+        setGameState(null);
+        setCurrentGameId(null);
+        setGameEvents([]);
+        setGameCreator(null);
+        setShowLobby(true);
+      }, 5000);
     });
   };
 
@@ -244,6 +261,8 @@ function App() {
     setCurrentGameId(null);
     setGameEvents([]);
     setGameCreator(null);
+    setShowGameOver(false);
+    setGameOverData(null);
     setShowLobby(true);
   };
 
@@ -256,6 +275,19 @@ function App() {
     };
     setGameEvents(prev => [...prev, event]);
   };
+
+  // Show game over screen if game has ended
+  if (showGameOver && gameOverData && connected && isLoggedIn) {
+    return (
+      <div className="App">
+        <GameOverScreen 
+          gameOverData={gameOverData}
+          currentUsername={username}
+          onReturnToLobby={handleLeaveGame}
+        />
+      </div>
+    );
+  }
 
   // Show game interface if in a game
   if (inGame && gameState && connected && isLoggedIn) {
