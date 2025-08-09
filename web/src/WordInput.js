@@ -50,31 +50,6 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername, au
     setInput('');
   };
 
-  // Handle keyboard navigation
-  const handleKeyDown = (e) => {
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (historyIndex < commandHistory.length - 1) {
-        const newIndex = historyIndex + 1;
-        setHistoryIndex(newIndex);
-        setInput(commandHistory[newIndex]);
-      }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (historyIndex > 0) {
-        const newIndex = historyIndex - 1;
-        setHistoryIndex(newIndex);
-        setInput(commandHistory[newIndex]);
-      } else if (historyIndex === 0) {
-        setHistoryIndex(-1);
-        setInput('');
-      }
-    } else if (e.key === 'Tab') {
-      e.preventDefault();
-      // Could add word completion here in the future
-    }
-  };
-
   // Handle end game command
   const handleEndGame = async () => {
     if (!authToken || !gameId) {
@@ -104,11 +79,12 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername, au
         }
       });
 
+      const result = await response.json();
+      
       if (!response.ok) {
-        throw new Error(`Failed to end game: ${response.status}`);
+        throw new Error(result.error || `Failed to end game: ${response.status}`);
       }
 
-      const result = await response.json();
       if (result.success && onAddGameEvent) {
         onAddGameEvent('success', 'Game ended successfully');
       } else if (onAddGameEvent) {
@@ -119,6 +95,31 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername, au
         onAddGameEvent('error', `Error ending game: ${error.message}`);
       }
       console.error('Error ending game:', error);
+    }
+  };
+
+  // Handle keyboard navigation
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (historyIndex < commandHistory.length - 1) {
+        const newIndex = historyIndex + 1;
+        setHistoryIndex(newIndex);
+        setInput(commandHistory[newIndex]);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (historyIndex > 0) {
+        const newIndex = historyIndex - 1;
+        setHistoryIndex(newIndex);
+        setInput(commandHistory[newIndex]);
+      } else if (historyIndex === 0) {
+        setHistoryIndex(-1);
+        setInput('');
+      }
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      // Could add word completion here in the future
     }
   };
 
