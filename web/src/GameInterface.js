@@ -257,6 +257,10 @@ function GameInterface({
             disabled={!isGameActive || !socket}
             gameId={gameState.game_id}
             currentUsername={currentUsername}
+            authToken={authToken}
+            serverUrl={serverUrl}
+            gameCreator={gameCreator}
+            onAddGameEvent={onAddGameEvent}
           />
           <GameLog 
             messages={gameEvents || []}
