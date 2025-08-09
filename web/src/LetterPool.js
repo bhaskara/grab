@@ -92,16 +92,19 @@ function LetterPool({ pool }) {
           ))
         )}
       </div>
-      {letters.length > 0 && (
-        <div style={{ 
-          marginTop: '10px', 
-          fontSize: '12px', 
-          color: '#aaa',
-          textAlign: 'center'
-        }}>
-          {new Set(letters.map(l => l.letter)).size} different letters • {letters.length} total tiles
-        </div>
-      )}
+      {letters.length > 0 && (() => {
+        const distinctLetters = new Set(letters.map(l => l.letter)).size;
+        return (
+          <div style={{ 
+            marginTop: '10px', 
+            fontSize: '12px', 
+            color: '#aaa',
+            textAlign: 'center'
+          }}>
+            {distinctLetters} different letters • {letters.length} total tiles
+          </div>
+        );
+      })()}
     </div>
   );
 }
