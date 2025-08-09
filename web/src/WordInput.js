@@ -17,39 +17,6 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername, au
     }
   }, [disabled]);
 
-  // Handle form submission
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (disabled || !input.trim()) return;
-
-    const command = input.trim().toLowerCase();
-    
-    // Add to command history
-    setCommandHistory(prev => [command, ...prev.slice(0, 19)]); // Keep last 20 commands
-    setHistoryIndex(-1);
-    
-    // Handle different commands
-    if (command === '!ready' || command === '!r' || command === '!pass') {
-      onPass();
-    } else if (command === '!end' || command === '!e') {
-      handleEndGame();
-    } else if (command === '!help') {
-      // Help will be handled by GameLog
-      if (onAddGameEvent) {
-        onAddGameEvent('system', 'Commands: word (letters only), !ready/!r, !end/!e, !help');
-      }
-    } else if (command.match(/^[a-z]+$/)) {
-      // Valid word (only lowercase letters)
-      onSubmitWord(command);
-    } else {
-      if (onAddGameEvent) {
-        onAddGameEvent('error', 'Invalid command. Use: word (letters only), !ready/!r, !end/!e, !help');
-      }
-    }
-    
-    setInput('');
-  };
-
   // Handle end game command
   const handleEndGame = async () => {
     if (!authToken || !gameId) {
@@ -96,6 +63,39 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername, au
       }
       console.error('Error ending game:', error);
     }
+  };
+
+  // Handle form submission
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (disabled || !input.trim()) return;
+
+    const command = input.trim().toLowerCase();
+    
+    // Add to command history
+    setCommandHistory(prev => [command, ...prev.slice(0, 19)]); // Keep last 20 commands
+    setHistoryIndex(-1);
+    
+    // Handle different commands
+    if (command === '!ready' || command === '!r' || command === '!pass') {
+      onPass();
+    } else if (command === '!end' || command === '!e') {
+      handleEndGame();
+    } else if (command === '!help') {
+      // Help will be handled by GameLog
+      if (onAddGameEvent) {
+        onAddGameEvent('system', 'Commands: word (letters only), !ready/!r, !end/!e, !help');
+      }
+    } else if (command.match(/^[a-z]+$/)) {
+      // Valid word (only lowercase letters)
+      onSubmitWord(command);
+    } else {
+      if (onAddGameEvent) {
+        onAddGameEvent('error', 'Invalid command. Use: word (letters only), !ready/!r, !end/!e, !help');
+      }
+    }
+    
+    setInput('');
   };
 
   // Handle keyboard navigation
@@ -170,7 +170,7 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername, au
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder={disabled ? "Game not active..." : "enter word, !ready, or !r"}
+          placeholder={disabled ? "Game not active..." : "enter word, !ready/!r, or !end/!e"}
           style={{
             ...inputStyle,
             opacity: disabled ? 0.5 : 1,
