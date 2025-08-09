@@ -4,7 +4,7 @@
  */
 import React, { useState, useRef, useEffect } from 'react';
 
-function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername }) {
+function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername, authToken, serverUrl, gameCreator, onAddGameEvent }) {
   const [input, setInput] = useState('');
   const [commandHistory, setCommandHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -29,16 +29,18 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername }) 
     setHistoryIndex(-1);
     
     // Handle different commands
-    if (command === '!ready' || command === '!pass') {
+    if (command === '!ready' || command === '!r' || command === '!pass') {
       onPass();
+    } else if (command === '!end') {
+      handleEndGame();
     } else if (command === '!help') {
       // Help will be handled by GameLog
-      console.log('Help command - commands: word, !ready, !help');
+      console.log('Help command - commands: word, !ready, !r, !end, !help');
     } else if (command.match(/^[a-z]+$/)) {
       // Valid word (only lowercase letters)
       onSubmitWord(command);
     } else {
-      console.log('Invalid command. Use: word (letters only), !ready, !help');
+      console.log('Invalid command. Use: word (letters only), !ready, !r, !end, !help');
     }
     
     setInput('');
@@ -66,6 +68,53 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername }) 
     } else if (e.key === 'Tab') {
       e.preventDefault();
       // Could add word completion here in the future
+    }
+  };
+
+  // Handle end game command
+  const handleEndGame = async () => {
+    if (!authToken || !gameId) {
+      console.log('Cannot end game: missing authentication or game ID');
+      return;
+    }
+
+    // Check if current user is the game creator
+    if (gameCreator !== currentUsername) {
+      if (onAddGameEvent) {
+        onAddGameEvent('error', 'Only the game creator can end the game');
+      }
+      console.log('Only the game creator can end the game');
+      return;
+    }
+
+    if (onAddGameEvent) {
+      onAddGameEvent('system', 'Ending game...');
+    }
+
+    try {
+      const response = await fetch(`${serverUrl}/api/games/${gameId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to end game: ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (result.success && onAddGameEvent) {
+        onAddGameEvent('success', 'Game ended successfully');
+      } else if (onAddGameEvent) {
+        onAddGameEvent('error', result.error || 'Failed to end game');
+      }
+    } catch (error) {
+      if (onAddGameEvent) {
+        onAddGameEvent('error', `Error ending game: ${error.message}`);
+      }
+      console.error('Error ending game:', error);
     }
   };
 
@@ -116,7 +165,7 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername }) 
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder={disabled ? "Game not active..." : "enter word or !ready"}
+          placeholder={disabled ? "Game not active..." : "enter word, !ready, or !r"}
           style={{
             ...inputStyle,
             opacity: disabled ? 0.5 : 1,
@@ -148,7 +197,8 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername }) 
       }}>
         <div><strong>Commands:</strong></div>
         <div>• <code>word</code> - Make a word (letters a-z only)</div>
-        <div>• <code>!ready</code> or <code>!pass</code> - Ready for next turn</div>
+        <div>• <code>!ready</code>, <code>!r</code>, or <code>!pass</code> - Ready for next turn</div>
+        <div>• <code>!end</code> - End the game (creator only)</div>
         <div>• <code>!help</code> - Show help information</div>
         <div>• <kbd>↑↓</kbd> - Navigate command history</div>
       </div>
