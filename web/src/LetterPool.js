@@ -1,6 +1,6 @@
 /**
  * LetterPool component displays the available letters in the game pool.
- * Shows letter tiles with their counts and point values from Scrabble scoring.
+ * Shows individual letter tiles with their point values from Scrabble scoring.
  */
 import React from 'react';
 
@@ -21,16 +21,19 @@ function LetterPool({ pool }) {
     );
   }
 
-  // Convert pool array [1, 0, 2, 0, 1, ...] to letter objects
+  // Convert pool array [1, 0, 2, 0, 1, ...] to individual letter tiles
   const letters = [];
   pool.forEach((count, index) => {
     if (count > 0) {
       const letter = String.fromCharCode(97 + index); // 'a' + index
-      letters.push({
-        letter: letter,
-        count: count,
-        points: LETTER_POINTS[letter] || 1
-      });
+      const points = LETTER_POINTS[letter] || 1;
+      // Create individual tiles for each copy of the letter
+      for (let i = 0; i < count; i++) {
+        letters.push({
+          letter: letter,
+          points: points
+        });
+      }
     }
   });
 
@@ -43,9 +46,9 @@ function LetterPool({ pool }) {
             Pool is empty - waiting for next letter draw
           </div>
         ) : (
-          letters.map(({ letter, count, points }) => (
+          letters.map(({ letter, points }, index) => (
             <div 
-              key={letter} 
+              key={`${letter}-${index}`} 
               className="letter-tile"
               style={{
                 position: 'relative',
@@ -85,42 +88,10 @@ function LetterPool({ pool }) {
               >
                 {points}
               </div>
-              {count > 1 && (
-                <div 
-                  className="letter-count" 
-                  style={{ 
-                    position: 'absolute',
-                    top: '-8px',
-                    right: '-8px',
-                    backgroundColor: '#dc3545',
-                    color: '#fff',
-                    borderRadius: '50%',
-                    width: '18px',
-                    height: '18px',
-                    fontSize: '11px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  {count}
-                </div>
-              )}
             </div>
           ))
         )}
       </div>
-      {letters.length > 0 && (
-        <div style={{ 
-          marginTop: '10px', 
-          fontSize: '12px', 
-          color: '#aaa',
-          textAlign: 'center'
-        }}>
-          {letters.length} different letters • {letters.reduce((sum, l) => sum + l.count, 0)} total tiles
-        </div>
-      )}
     </div>
   );
 }
