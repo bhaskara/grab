@@ -39,8 +39,8 @@ function App() {
     
     setConnectionStatus('Logging in...');
     
+    // Step 1: Login to get auth token
     try {
-      // Step 1: Login to get auth token
       const response = await fetch(`${serverUrl}/api/auth/login`, {
         method: 'POST',
         headers: {
@@ -185,7 +185,11 @@ function App() {
       newSocket.connect();
       
     } catch (error) {
-      setConnectionStatus(`Connection error: ${error.message}`);
+      if (isLoggedIn) {
+        setConnectionStatus(`Connection error: ${error.message}`);
+      } else {
+        setConnectionStatus(`Login error: ${error.message}`);
+      }
     }
   };
 
@@ -195,6 +199,8 @@ function App() {
       setSocket(null);
     }
     setConnected(false);
+    setIsLoggedIn(false);
+    setAuthToken(null);
     setConnectionStatus('Disconnected');
     setShowLobby(false);
     setCurrentGameId(null);
@@ -320,7 +326,7 @@ function App() {
         </div>
         
         <div style={{ margin: '20px' }}>
-          {!connected ? (
+          {(!isLoggedIn || !connected) ? (
             <button 
               onClick={loginAndConnect}
               style={{ padding: '12px 24px', fontSize: '16px', marginRight: '10px' }}
