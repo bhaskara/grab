@@ -37,6 +37,10 @@ function LetterPool({ pool }) {
     }
   });
 
+  // Calculate summary statistics
+  const distinctLetters = letters.length > 0 ? new Set(letters.map(l => l.letter)).size : 0;
+  const totalTiles = letters.length;
+
   return (
     <div className="letter-pool" style={{ padding: '15px', backgroundColor: '#222', borderRadius: '8px', margin: '10px 0' }}>
       <h3 style={{ margin: '0 0 15px 0', color: '#fff' }}>📚 Available Letters</h3>
@@ -92,19 +96,16 @@ function LetterPool({ pool }) {
           ))
         )}
       </div>
-      {letters.length > 0 && (() => {
-        const distinctLetters = new Set(letters.map(l => l.letter)).size;
-        return (
-          <div style={{ 
-            marginTop: '10px', 
-            fontSize: '12px', 
-            color: '#aaa',
-            textAlign: 'center'
-          }}>
-            {distinctLetters} different letters • {letters.length} total tiles
-          </div>
-        );
-      })()}
+      {letters.length > 0 && (
+        <div style={{ 
+          marginTop: '10px', 
+          fontSize: '12px', 
+          color: '#aaa',
+          textAlign: 'center'
+        }}>
+          {distinctLetters} different letters • {totalTiles} total tiles
+        </div>
+      )}
     </div>
   );
 }
