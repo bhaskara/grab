@@ -34,6 +34,110 @@ function App() {
     console.log('Generated random username:', randomUsername);
   }, []);
 
+  const setupSocketHandlers = (newSocket) => {
+    newSocket.on('connect', () => {
+      setConnected(true);
+      setConnectionStatus('Connected successfully!');
+      console.log('Socket.IO connected successfully');
+    });
+
+    newSocket.on('disconnect', () => {
+      setConnected(false);
+      setConnectionStatus('Disconnected');
+      console.log('Socket.IO disconnected');
+    });
+
+    newSocket.on('error', (error) => {
+      setConnectionStatus('Socket Error: ' + error);
+      console.error('Socket.IO error:', error);
+    });
+
+    newSocket.on('connect_error', (error) => {
+      setConnectionStatus('Connection Error: ' + error.message);
+      console.error('Socket.IO connection error:', error);
+    });
+
+    newSocket.on('connected', (data) => {
+      console.log('Server confirmed connection:', data);
+      // After successful socket connection, show the lobby
+      setShowLobby(true);
+    });
+
+    // Game state updates
+    newSocket.on('game_state', (data) => {
+      console.log('Game state update:', data);
+      setGameState(data.data);
+      setInGame(true);
+      setShowLobby(false);
+    });
+
+    // Move results
+    newSocket.on('move_result', (data) => {
+      console.log('Move result:', data);
+      if (data.success && data.game_state) {
+        setGameState(data.game_state);
+        addGameEvent('success', 'Move successful!');
+      } else if (data.error) {
+        addGameEvent('error', `Move failed: ${data.error}`);
+      }
+    });
+
+    // Player connection events
+    newSocket.on('player_disconnected', (data) => {
+      console.log('Player disconnected:', data);
+      addGameEvent('connection', `${data.player} disconnected`);
+    });
+
+    newSocket.on('player_reconnected', (data) => {
+      console.log('Player reconnected:', data);
+      addGameEvent('connection', `${data.player} reconnected`);
+    });
+
+    // Game ended event
+    newSocket.on('game_ended', (data) => {
+      console.log('Game ended:', data);
+      addGameEvent('game_event', `Game ended by ${data.ended_by}: ${data.reason}`);
+      setInGame(false);
+      setGameState(null);
+      setCurrentGameId(null);
+      setShowLobby(true);
+    });
+
+    // Turn progression events
+    newSocket.on('turn_starting', (data) => {
+      console.log('Turn starting:', data);
+      const letters = data.letters_drawn ? data.letters_drawn.join(', ').toUpperCase() : 'none';
+      addGameEvent('game_event', `Turn ${data.turn_number} starting! New letters: ${letters} (${data.letters_remaining_in_bag} left in bag)`);
+      if (data.time_limit) {
+        addGameEvent('system', `Turn timer: ${data.time_limit} seconds`);
+      }
+    });
+
+    newSocket.on('turn_ending', (data) => {
+      console.log('Turn ending:', data);
+      const reason = data.reason === 'all_players_passed' ? 'All players passed' : 'Time expired';
+      addGameEvent('game_event', `Turn ${data.turn_number} ended: ${reason} (${data.final_moves_count} moves made)`);
+    });
+
+    newSocket.on('game_ending', (data) => {
+      console.log('Game ending:', data);
+      const reason = data.reason === 'bag_empty' ? 'All letters used' : 'Game stopped by creator';
+      addGameEvent('game_event', `Game ending: ${reason}`);
+      
+      if (data.final_scores) {
+        const scores = Object.entries(data.final_scores)
+          .sort(([,a], [,b]) => b - a)
+          .map(([player, score]) => `${player}: ${score}`)
+          .join(', ');
+        addGameEvent('success', `Final scores: ${scores}`);
+        
+        if (data.winner) {
+          addGameEvent('success', `🏆 Winner: ${data.winner}!`);
+        }
+      }
+    });
+  };
+
   const connectSocketOnly = (token) => {
     setConnectionStatus('Connecting to game server...');
     
@@ -47,108 +151,7 @@ function App() {
         autoConnect: false
       });
 
-      newSocket.on('connect', () => {
-        setConnected(true);
-        setConnectionStatus('Connected successfully!');
-        console.log('Socket.IO connected successfully');
-      });
-
-      newSocket.on('disconnect', () => {
-        setConnected(false);
-        setConnectionStatus('Disconnected');
-        console.log('Socket.IO disconnected');
-      });
-
-      newSocket.on('error', (error) => {
-        setConnectionStatus('Socket Error: ' + error);
-        console.error('Socket.IO error:', error);
-      });
-
-      newSocket.on('connect_error', (error) => {
-        setConnectionStatus('Connection Error: ' + error.message);
-        console.error('Socket.IO connection error:', error);
-      });
-
-      newSocket.on('connected', (data) => {
-        console.log('Server confirmed connection:', data);
-        // After successful socket connection, show the lobby
-        setShowLobby(true);
-      });
-
-      // Game state updates
-      newSocket.on('game_state', (data) => {
-        console.log('Game state update:', data);
-        setGameState(data.data);
-        setInGame(true);
-        setShowLobby(false);
-      });
-
-      // Move results
-      newSocket.on('move_result', (data) => {
-        console.log('Move result:', data);
-        if (data.success && data.game_state) {
-          setGameState(data.game_state);
-          addGameEvent('success', 'Move successful!');
-        } else if (data.error) {
-          addGameEvent('error', `Move failed: ${data.error}`);
-        }
-      });
-
-      // Player connection events
-      newSocket.on('player_disconnected', (data) => {
-        console.log('Player disconnected:', data);
-        addGameEvent('connection', `${data.player} disconnected`);
-      });
-
-      newSocket.on('player_reconnected', (data) => {
-        console.log('Player reconnected:', data);
-        addGameEvent('connection', `${data.player} reconnected`);
-      });
-
-      // Game ended event
-      newSocket.on('game_ended', (data) => {
-        console.log('Game ended:', data);
-        addGameEvent('game_event', `Game ended by ${data.ended_by}: ${data.reason}`);
-        setInGame(false);
-        setGameState(null);
-        setCurrentGameId(null);
-        setShowLobby(true);
-      });
-
-      // Turn progression events
-      newSocket.on('turn_starting', (data) => {
-        console.log('Turn starting:', data);
-        const letters = data.letters_drawn ? data.letters_drawn.join(', ').toUpperCase() : 'none';
-        addGameEvent('game_event', `Turn ${data.turn_number} starting! New letters: ${letters} (${data.letters_remaining_in_bag} left in bag)`);
-        if (data.time_limit) {
-          addGameEvent('system', `Turn timer: ${data.time_limit} seconds`);
-        }
-      });
-
-      newSocket.on('turn_ending', (data) => {
-        console.log('Turn ending:', data);
-        const reason = data.reason === 'all_players_passed' ? 'All players passed' : 'Time expired';
-        addGameEvent('game_event', `Turn ${data.turn_number} ended: ${reason} (${data.final_moves_count} moves made)`);
-      });
-
-      newSocket.on('game_ending', (data) => {
-        console.log('Game ending:', data);
-        const reason = data.reason === 'bag_empty' ? 'All letters used' : 'Game stopped by creator';
-        addGameEvent('game_event', `Game ending: ${reason}`);
-        
-        if (data.final_scores) {
-          const scores = Object.entries(data.final_scores)
-            .sort(([,a], [,b]) => b - a)
-            .map(([player, score]) => `${player}: ${score}`)
-            .join(', ');
-          addGameEvent('success', `Final scores: ${scores}`);
-          
-          if (data.winner) {
-            addGameEvent('success', `🏆 Winner: ${data.winner}!`);
-          }
-        }
-      });
-
+      setupSocketHandlers(newSocket);
       setSocket(newSocket);
       newSocket.connect();
       
@@ -211,8 +214,6 @@ function App() {
       setSocket(null);
     }
     setConnected(false);
-    setIsLoggedIn(false);
-    setAuthToken(null);
     setConnectionStatus('Disconnected');
     setShowLobby(false);
     setCurrentGameId(null);
@@ -220,6 +221,8 @@ function App() {
     setInGame(false);
     setGameEvents([]);
     setGameCreator(null);
+    // Keep isLoggedIn and authToken for potential reconnection
+    // They will be cleared on page refresh or explicit logout
   };
 
   const handleGameJoined = (gameId, joinData) => {
