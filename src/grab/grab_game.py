@@ -71,9 +71,8 @@ class CommonSuffixException(DisallowedWordException):
         word : str
             The word that was rejected due to common suffix rule
         """
-        self.word = word
-        message = f"Word '{word}' is rejected due to common suffix rule"
-        Exception.__init__(self, message)
+        super().__init__(word)  # Call parent constructor to set self.word
+        self.args = (f"Word '{word}' is rejected due to common suffix rule",)
 
 
 # Standard Scrabble letter scores (A=1, B=3, C=3, ...)
