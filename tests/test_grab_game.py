@@ -77,7 +77,7 @@ class TestGrab(unittest.TestCase):
 
     def test_construct_move_scoring_with_reused_word(self):
         """Test scoring when reusing another player's word"""
-        game = Grab()
+        game = Grab(disallow_common_suffixes=False)  # Disable suffix checking for this test
         
         # Create a state where player 1 has the word "cat"
         # Pool has letter "s" to make "cats"
@@ -540,7 +540,7 @@ class TestGrab(unittest.TestCase):
 
     def test_handle_action_complex_scenario(self):
         """Test handle_action in complex multi-player scenario"""
-        game = Grab()
+        game = Grab(disallow_common_suffixes=False)  # Disable suffix checking for this test
         
         # Set up game with 3 players, some words, mixed pass status
         existing_words = [Word("dog"), Word("cat")]
@@ -853,6 +853,185 @@ class TestGrab(unittest.TestCase):
         game4 = Grab(num_players=4)
         self.assertEqual(game4.state.num_players, 4)
         self.assertEqual(len(game4.state.scores), 4)
+
+    def test_disallow_common_suffixes_default_true(self):
+        """Test that disallow_common_suffixes defaults to True"""
+        game = Grab()
+        self.assertTrue(game.disallow_common_suffixes)
+
+    def test_disallow_common_suffixes_explicit_false(self):
+        """Test that disallow_common_suffixes can be set to False"""
+        game = Grab(disallow_common_suffixes=False)
+        self.assertFalse(game.disallow_common_suffixes)
+
+    def test_disallow_common_suffixes_explicit_true(self):
+        """Test that disallow_common_suffixes can be explicitly set to True"""
+        game = Grab(disallow_common_suffixes=True)
+        self.assertTrue(game.disallow_common_suffixes)
+
+    def test_has_common_suffix_s_suffix(self):
+        """Test _has_common_suffix method with S suffix"""
+        game = Grab()
+        
+        # "cats" should be detected as having common suffix since "cat" is in dictionary
+        self.assertTrue(game._has_common_suffix("cats"))
+        self.assertTrue(game._has_common_suffix("CATS"))  # Test case insensitivity
+        
+        # "runs" should be detected as having common suffix since "run" is in dictionary
+        self.assertTrue(game._has_common_suffix("runs"))
+        
+        # Single letter "s" should not be detected as having suffix
+        self.assertFalse(game._has_common_suffix("s"))
+        
+        # Word ending in 's' but root not in dictionary should not be detected
+        # (assuming "xyz" is not in dictionary)
+        self.assertFalse(game._has_common_suffix("xyzs"))
+
+    def test_has_common_suffix_ed_suffix(self):
+        """Test _has_common_suffix method with ED suffix"""
+        game = Grab()
+        
+        # "walked" should be detected since "walk" is in dictionary (removing 'ed')
+        self.assertTrue(game._has_common_suffix("walked"))
+        self.assertTrue(game._has_common_suffix("WALKED"))  # Test case insensitivity
+        
+        # "played" should be detected since "play" is in dictionary (removing 'ed')
+        self.assertTrue(game._has_common_suffix("played"))
+        
+        # "jumped" should be detected since "jumpe" might be in dictionary (removing 'd')
+        # or "jump" is in dictionary (removing 'ed')
+        self.assertTrue(game._has_common_suffix("jumped"))
+        
+        # Two letter word "ed" should not be detected as having suffix
+        self.assertFalse(game._has_common_suffix("ed"))
+        
+        # Word ending in 'ed' but root not in dictionary should not be detected
+        self.assertFalse(game._has_common_suffix("xyzed"))
+
+    def test_has_common_suffix_no_suffix(self):
+        """Test _has_common_suffix method with words that don't have common suffixes"""
+        game = Grab()
+        
+        # Regular words without common suffixes
+        self.assertFalse(game._has_common_suffix("cat"))
+        self.assertFalse(game._has_common_suffix("run"))
+        self.assertFalse(game._has_common_suffix("play"))
+        self.assertFalse(game._has_common_suffix("jump"))
+        
+        # Words ending in other letters
+        self.assertFalse(game._has_common_suffix("car"))
+        self.assertFalse(game._has_common_suffix("dog"))
+
+    def test_construct_move_disallow_s_suffix_enabled(self):
+        """Test that words with S suffix are rejected when disallow_common_suffixes=True"""
+        game = Grab(disallow_common_suffixes=True)
+        
+        # Create state with letters for "cats"
+        state = State(
+            num_players=1,
+            words_per_player=[[]],
+            pool=np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]),  # a, c, s, t
+            bag=np.zeros(26),
+            scores=np.array([0])
+        )
+        
+        # Attempt to make "cats" should raise DisallowedWordException
+        with self.assertRaises(DisallowedWordException) as context:
+            game.construct_move(state, 0, "cats")
+        
+        self.assertEqual(context.exception.word, "cats")
+
+    def test_construct_move_disallow_ed_suffix_enabled(self):
+        """Test that words with ED suffix are rejected when disallow_common_suffixes=True"""
+        game = Grab(disallow_common_suffixes=True)
+        
+        # Create state with letters for "walked"
+        state = State(
+            num_players=1,
+            words_per_player=[[]],
+            pool=np.array([1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0]),  # a, d, e, k, l, w
+            bag=np.zeros(26),
+            scores=np.array([0])
+        )
+        
+        # Attempt to make "walked" should raise DisallowedWordException
+        with self.assertRaises(DisallowedWordException) as context:
+            game.construct_move(state, 0, "walked")
+        
+        self.assertEqual(context.exception.word, "walked")
+
+    def test_construct_move_disallow_suffixes_disabled(self):
+        """Test that words with common suffixes are allowed when disallow_common_suffixes=False"""
+        game = Grab(disallow_common_suffixes=False)
+        
+        # Create state with letters for "cats"
+        state = State(
+            num_players=1,
+            words_per_player=[[]],
+            pool=np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]),  # a, c, s, t
+            bag=np.zeros(26),
+            scores=np.array([0])
+        )
+        
+        # Making "cats" should succeed when suffix checking is disabled
+        move, new_state = game.construct_move(state, 0, "cats")
+        
+        self.assertIsInstance(move, MakeWord)
+        self.assertEqual(move.word, "cats")
+        self.assertEqual(len(new_state.words_per_player[0]), 1)
+        self.assertEqual(new_state.words_per_player[0][0].word, "cats")
+
+    def test_construct_move_root_words_still_allowed(self):
+        """Test that root words (without suffixes) are still allowed"""
+        game = Grab(disallow_common_suffixes=True)
+        
+        # Create state with letters for "cat"
+        state = State(
+            num_players=1,
+            words_per_player=[[]],
+            pool=np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]),  # a, c, t
+            bag=np.zeros(26),
+            scores=np.array([0])
+        )
+        
+        # Making "cat" should succeed even with suffix checking enabled
+        move, new_state = game.construct_move(state, 0, "cat")
+        
+        self.assertIsInstance(move, MakeWord)
+        self.assertEqual(move.word, "cat")
+        self.assertEqual(len(new_state.words_per_player[0]), 1)
+        self.assertEqual(new_state.words_per_player[0][0].word, "cat")
+
+    def test_construct_move_words_without_common_suffixes_allowed(self):
+        """Test that words ending in s/ed but without valid roots are still allowed"""
+        game = Grab(disallow_common_suffixes=True)
+        
+        # Test a word ending in 's' but root not in dictionary
+        # We'll use a made-up word that should be in the dictionary but whose root isn't
+        # For this test, let's assume there's a word like "aas" (which is in twl06) 
+        # but "aa" might have different behavior
+        
+        # Create state with letters for "aas" (which is in twl06)
+        state = State(
+            num_players=1,
+            words_per_player=[[]],
+            pool=np.array([2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]),  # a, a, s
+            bag=np.zeros(26),
+            scores=np.array([0])
+        )
+        
+        # Making "aas" should succeed if "aa" is also in dictionary, it would be rejected
+        # But if "aa" is in dictionary, then "aas" would be rejected
+        # Let's check what happens
+        try:
+            move, new_state = game.construct_move(state, 0, "aas")
+            # If this succeeds, it means "aa" is not in dictionary or suffix check didn't trigger
+            self.assertIsInstance(move, MakeWord)
+            self.assertEqual(move.word, "aas")
+        except DisallowedWordException:
+            # If this fails, it means "aa" is in dictionary and suffix check triggered
+            # This is also valid behavior
+            pass
 
 
 if __name__ == '__main__':

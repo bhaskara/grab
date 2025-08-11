@@ -34,7 +34,7 @@ def test_construct_move_from_pool_only():
 
 def test_construct_move_with_existing_word():
     """Test making a word using existing word plus pool letters."""
-    game = Grab()
+    game = Grab(disallow_common_suffixes=False)  # Disable suffix checking for this test
     state = State(num_players=2)
     
     # Add existing word to player 0
