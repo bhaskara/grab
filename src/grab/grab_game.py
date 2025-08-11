@@ -71,9 +71,9 @@ class CommonSuffixException(DisallowedWordException):
         word : str
             The word that was rejected due to common suffix rule
         """
-        self.word = word
-        message = f"Word '{word}' is rejected due to common suffix rule"
-        Exception.__init__(self, message)  # Skip DisallowedWordException.__init__
+        super().__init__(word)  # Call parent constructor
+        # Override the message with our custom one
+        self.args = (f"Word '{word}' is rejected due to common suffix rule",)
 
 
 # Standard Scrabble letter scores (A=1, B=3, C=3, ...)
@@ -161,14 +161,14 @@ class Grab(object):
         
         # Check for 'ED' suffix
         if word_lower.endswith('ed') and len(word_lower) > 2:
-            # Check removing final 'D'
-            root_word_d = word_lower[:-1]  # Remove final 'D'
-            if root_word_d in self.valid_words:
-                return True
-            
-            # Check removing final 'ED'
+            # Check removing final 'ED' first (more common case)
             root_word_ed = word_lower[:-2]  # Remove final 'ED'
             if root_word_ed in self.valid_words:
+                return True
+            
+            # Check removing final 'D' (less common case)
+            root_word_d = word_lower[:-1]  # Remove final 'D'
+            if root_word_d in self.valid_words:
                 return True
         
         return False
