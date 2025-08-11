@@ -4,7 +4,7 @@ Unit tests for Grab game logic and scoring
 
 import unittest
 import numpy as np
-from src.grab.grab_game import Grab, SCRABBLE_LETTER_SCORES, NoWordFoundException, DisallowedWordException
+from src.grab.grab_game import Grab, SCRABBLE_LETTER_SCORES, NoWordFoundException, DisallowedWordException, CommonSuffixException
 from src.grab.grab_state import State, Word, MakeWord, DrawLetters
 
 
@@ -935,8 +935,8 @@ class TestGrab(unittest.TestCase):
             scores=np.array([0])
         )
         
-        # Attempt to make "cats" should raise DisallowedWordException
-        with self.assertRaises(DisallowedWordException) as context:
+        # Attempt to make "cats" should raise CommonSuffixException
+        with self.assertRaises(CommonSuffixException) as context:
             game.construct_move(state, 0, "cats")
         
         self.assertEqual(context.exception.word, "cats")
@@ -954,8 +954,8 @@ class TestGrab(unittest.TestCase):
             scores=np.array([0])
         )
         
-        # Attempt to make "walked" should raise DisallowedWordException
-        with self.assertRaises(DisallowedWordException) as context:
+        # Attempt to make "walked" should raise CommonSuffixException
+        with self.assertRaises(CommonSuffixException) as context:
             game.construct_move(state, 0, "walked")
         
         self.assertEqual(context.exception.word, "walked")
@@ -1028,7 +1028,7 @@ class TestGrab(unittest.TestCase):
             # If this succeeds, it means "aa" is not in dictionary or suffix check didn't trigger
             self.assertIsInstance(move, MakeWord)
             self.assertEqual(move.word, "aas")
-        except DisallowedWordException:
+        except (DisallowedWordException, CommonSuffixException):
             # If this fails, it means "aa" is in dictionary and suffix check triggered
             # This is also valid behavior
             pass

@@ -54,6 +54,27 @@ class DisallowedWordException(Exception):
         super().__init__(message)
 
 
+class CommonSuffixException(DisallowedWordException):
+    """Exception raised when a word is rejected due to common suffix rule.
+    
+    Attributes
+    ----------
+    word : str
+        The word that was rejected
+    """
+    
+    def __init__(self, word: str):
+        """Initialize the exception.
+        
+        Parameters
+        ----------
+        word : str
+            The word that was rejected due to common suffix rule
+        """
+        super().__init__(word)  # Call parent constructor to set self.word
+        self.args = (f"Word '{word}' is rejected due to common suffix rule",)
+
+
 # Standard Scrabble letter scores (A=1, B=3, C=3, ...)
 SCRABBLE_LETTER_SCORES = np.array([
     1, 3, 3, 2, 1, 4, 2, 4, 1, 8, 5, 1, 3, 1, 1, 3, 10, 1, 1, 1, 1, 4, 4, 8, 4, 10
@@ -76,6 +97,9 @@ class Grab(object):
     letter_scores : np.ndarray, optional
         Length-26 array containing per-letter scores (a=0, b=1, ..., z=25).
         Defaults to standard Scrabble letter scores.
+    disallow_common_suffixes : bool, optional
+        If True, disallow words that end with common suffixes if the root word
+        is also in the dictionary. Defaults to True.
     
     """
 
@@ -139,14 +163,14 @@ class Grab(object):
         
         # Check for 'ED' suffix
         if word_lower.endswith('ed') and len(word_lower) > 2:
-            # Check removing final 'D'
-            root_word_d = word_lower[:-1]  # Remove final 'D'
-            if root_word_d in self.valid_words:
-                return True
-            
-            # Check removing final 'ED'
+            # Check removing final 'ED' first (more common case)
             root_word_ed = word_lower[:-2]  # Remove final 'ED'
             if root_word_ed in self.valid_words:
+                return True
+            
+            # Check removing final 'D' (less common case)
+            root_word_d = word_lower[:-1]  # Remove final 'D'
+            if root_word_d in self.valid_words:
                 return True
         
         return False
@@ -299,6 +323,8 @@ class Grab(object):
         ------
         DisallowedWordException
             If the word is not in the allowed word list
+        CommonSuffixException
+            If the word is rejected due to common suffix rule (inherits from DisallowedWordException)
         NoWordFoundException
             If the word could not be made given the current board state
         ValueError
@@ -315,7 +341,7 @@ class Grab(object):
         
         # Check for common suffixes if the flag is enabled
         if self.disallow_common_suffixes and self._has_common_suffix(word):
-            raise DisallowedWordException(word)
+            raise CommonSuffixException(word)
         
         # Construct letter counts for the new word
         try:
