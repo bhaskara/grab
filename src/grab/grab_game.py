@@ -54,6 +54,28 @@ class DisallowedWordException(Exception):
         super().__init__(message)
 
 
+class CommonSuffixException(DisallowedWordException):
+    """Exception raised when a word is rejected due to common suffix rule.
+    
+    Attributes
+    ----------
+    word : str
+        The word that was rejected
+    """
+    
+    def __init__(self, word: str):
+        """Initialize the exception.
+        
+        Parameters
+        ----------
+        word : str
+            The word that was rejected due to common suffix rule
+        """
+        self.word = word
+        message = f"Word '{word}' is rejected due to common suffix rule"
+        Exception.__init__(self, message)  # Skip DisallowedWordException.__init__
+
+
 # Standard Scrabble letter scores (A=1, B=3, C=3, ...)
 SCRABBLE_LETTER_SCORES = np.array([
     1, 3, 3, 2, 1, 4, 2, 4, 1, 8, 5, 1, 3, 1, 1, 3, 10, 1, 1, 1, 1, 4, 4, 8, 4, 10
@@ -315,7 +337,7 @@ class Grab(object):
         
         # Check for common suffixes if the flag is enabled
         if self.disallow_common_suffixes and self._has_common_suffix(word):
-            raise DisallowedWordException(word)
+            raise CommonSuffixException(word)
         
         # Construct letter counts for the new word
         try:
