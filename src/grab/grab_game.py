@@ -79,7 +79,7 @@ class Grab(object):
     
     """
 
-    def __init__(self, num_players: int = 2, word_list: str = 'twl06', letter_scores: np.ndarray = None, next_letters: Optional[List[str]] = None):
+    def __init__(self, num_players: int = 2, word_list: str = 'twl06', letter_scores: np.ndarray = None, next_letters: Optional[List[str]] = None, disallow_common_suffixes: bool = True):
         """Initialize a Grab game instance.
         
         Parameters
@@ -95,6 +95,9 @@ class Grab(object):
         next_letters : List[str], optional
             Initial list of letters to be drawn in order before falling back to random 
             sampling. If None, creates empty list.
+        disallow_common_suffixes : bool, optional
+            If True, disallow words that end with common suffixes if the root word
+            is also in the dictionary. Defaults to True.
         """
         if num_players < 1:
             raise ValueError("Number of players must be at least 1")
@@ -107,9 +110,46 @@ class Grab(object):
             self.letter_scores = np.array(letter_scores)
         
         self.valid_words = load_word_list(word_list)
+        self.disallow_common_suffixes = disallow_common_suffixes
         
         # Initialize the game state to the starting state
         self._state = State(num_players=num_players, next_letters=next_letters)
+
+    def _has_common_suffix(self, word: str) -> bool:
+        """Check if a word has a common suffix and the root word is also valid.
+        
+        Parameters
+        ----------
+        word : str
+            The word to check for common suffixes
+            
+        Returns
+        -------
+        bool
+            True if the word has a common suffix and the root is in the dictionary,
+            False otherwise
+        """
+        word_lower = word.lower()
+        
+        # Check for 'S' suffix
+        if word_lower.endswith('s') and len(word_lower) > 1:
+            root_word = word_lower[:-1]  # Remove final 'S'
+            if root_word in self.valid_words:
+                return True
+        
+        # Check for 'ED' suffix
+        if word_lower.endswith('ed') and len(word_lower) > 2:
+            # Check removing final 'D'
+            root_word_d = word_lower[:-1]  # Remove final 'D'
+            if root_word_d in self.valid_words:
+                return True
+            
+            # Check removing final 'ED'
+            root_word_ed = word_lower[:-2]  # Remove final 'ED'
+            if root_word_ed in self.valid_words:
+                return True
+        
+        return False
 
     @property
     def state(self) -> State:
@@ -271,6 +311,10 @@ class Grab(object):
         
         # Check if word is in valid word list
         if word.lower() not in self.valid_words:
+            raise DisallowedWordException(word)
+        
+        # Check for common suffixes if the flag is enabled
+        if self.disallow_common_suffixes and self._has_common_suffix(word):
             raise DisallowedWordException(word)
         
         # Construct letter counts for the new word
