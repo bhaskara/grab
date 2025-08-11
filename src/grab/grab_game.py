@@ -71,9 +71,9 @@ class CommonSuffixException(DisallowedWordException):
         word : str
             The word that was rejected due to common suffix rule
         """
-        super().__init__(word)  # Call parent constructor
-        # Override the message with our custom one
-        self.args = (f"Word '{word}' is rejected due to common suffix rule",)
+        self.word = word
+        message = f"Word '{word}' is rejected due to common suffix rule"
+        Exception.__init__(self, message)
 
 
 # Standard Scrabble letter scores (A=1, B=3, C=3, ...)
@@ -98,6 +98,9 @@ class Grab(object):
     letter_scores : np.ndarray, optional
         Length-26 array containing per-letter scores (a=0, b=1, ..., z=25).
         Defaults to standard Scrabble letter scores.
+    disallow_common_suffixes : bool, optional
+        If True, disallow words that end with common suffixes if the root word
+        is also in the dictionary. Defaults to True.
     
     """
 
@@ -321,6 +324,8 @@ class Grab(object):
         ------
         DisallowedWordException
             If the word is not in the allowed word list
+        CommonSuffixException
+            If the word is rejected due to common suffix rule (inherits from DisallowedWordException)
         NoWordFoundException
             If the word could not be made given the current board state
         ValueError
