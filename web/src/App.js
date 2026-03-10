@@ -28,9 +28,9 @@ function App() {
     setUsername(randomUsername);
     
     // Determine server URL
-    const serverUrl = window.location.hostname === 'localhost' 
-      ? 'http://localhost:5000'  // Local development
-      : `http://${window.location.hostname}:5000`;  // External access
+    const serverUrl = window.location.hostname === 'localhost'
+      ? 'http://localhost:5001'  // Local development
+      : `http://${window.location.hostname}:5001`;  // External access
     
     setServerUrl(serverUrl);
     console.log('Server URL:', serverUrl);
