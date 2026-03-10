@@ -5,10 +5,16 @@ This module creates and configures the Flask application instance
 with WebSocket support for real-time game communication.
 """
 
+import os
+
 from flask import Flask
 from flask_socketio import SocketIO
 from flask_cors import CORS
 from loguru import logger
+
+# Templates live at the repo root's templates/ directory, two levels above this file.
+_TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'templates')
+
 
 def create_app(config=None):
     """
@@ -30,7 +36,7 @@ def create_app(config=None):
     )
     logger.info("Starting Grab game server")
     
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder=_TEMPLATE_DIR)
     
     # Default configuration
     app.config.update({
