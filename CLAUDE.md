@@ -18,6 +18,8 @@ This is a web-based implementation of "Grab" - a word game played with Scrabble 
 
 Currently in prototype phase - not designed for large scale deployment. Focus is on core gameplay mechanics and real-time communication patterns.
 
+The project was originally developed on a remote Linux server but I'm now moving development to my Mac laptop.  So some things may need to be changed.
+
 ## Style guidelines
 
 This project is for learning, so please document things.  It doesn't have to be overly verbose, but brief explanations of things will be helpful:
