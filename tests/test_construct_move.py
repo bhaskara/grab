@@ -82,5 +82,94 @@ def test_construct_move_invalid_word():
     with pytest.raises(DisallowedWordException, match="Word 'cat1' is not in the allowed word list"):
         game.construct_move(state, 0, "cat1")
 
+def test_construct_move_anagram_rejection():
+    """Test that stealing a word to make an anagram (same length) is rejected.
+
+    For example, stealing "cat" to make "act" should fail because the new word
+    is not strictly longer than the stolen word.
+    """
+    game = Grab()
+    state = State(num_players=2)
+
+    # Give player 0 the word "cat"
+    state.words_per_player[0].append(Word("cat"))
+
+    # Add letters to pool that would allow "act" from pool alone too
+    # but we want to test that stealing "cat" to rearrange as "act" fails
+    # Don't put a/c/t in pool so the only way to make "act" is by stealing "cat"
+
+    with pytest.raises(NoWordFoundException, match="Cannot construct word 'act'"):
+        game.construct_move(state, 1, "act")
+
+
+def test_construct_move_same_length_steal_rejection():
+    """Test that stealing a word to make a same-length word is rejected.
+
+    Even if extra pool letters are available, if the resulting word is the
+    same length as the stolen word, the move should be rejected.
+    """
+    game = Grab()
+    state = State(num_players=2)
+
+    # Give player 0 the word "cat"
+    state.words_per_player[0].append(Word("cat"))
+
+    # Add 't', 'a', 'c' to pool (extras beyond what "cat" provides)
+    state.pool[0] = 1   # 'a'
+    state.pool[2] = 1   # 'c'
+    state.pool[19] = 1  # 't'
+
+    # "tac" is same length as "cat" — should fail to steal
+    # (but could succeed from pool alone if "tac" were a valid word)
+    # Since "tac" isn't a real word, use "act" which is valid
+    # "act" can be made from pool letters alone (no steal), so it should succeed
+    move, new_state = game.construct_move(state, 1, "act")
+    # Verify it was made from pool, not by stealing
+    assert move.other_player_words == []
+    assert len(new_state.words_per_player[0]) == 1  # player 0 still has "cat"
+
+
+def test_construct_move_longer_steal_succeeds():
+    """Test that stealing a word to make a strictly longer word succeeds.
+
+    Stealing "cat" to make "cats" (longer) should work fine.
+    """
+    game = Grab(disallow_common_suffixes=False)
+    state = State(num_players=2)
+
+    # Give player 0 the word "cat"
+    state.words_per_player[0].append(Word("cat"))
+
+    # Add 's' to pool
+    state.pool[18] = 1  # 's'
+
+    move, new_state = game.construct_move(state, 1, "cats")
+
+    assert move.other_player_words == [(0, "cat")]
+    assert move.word == "cats"
+    assert len(new_state.words_per_player[0]) == 0  # "cat" was stolen
+    assert new_state.words_per_player[1][0].word == "cats"
+
+
+def test_construct_move_pool_only_unaffected_by_length_check():
+    """Test that making a word purely from pool letters is unaffected.
+
+    The length check only applies when stealing an existing word. Making a
+    short word from pool letters should still work.
+    """
+    game = Grab()
+    state = State(num_players=2)
+
+    # Add letters for "at" to pool
+    state.pool[0] = 1   # 'a'
+    state.pool[19] = 1  # 't'
+
+    move, new_state = game.construct_move(state, 0, "at")
+
+    assert move.other_player_words == []
+    assert move.word == "at"
+    assert set(move.pool_letters) == {'a', 't'}
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

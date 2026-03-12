@@ -362,7 +362,13 @@ class Grab(object):
             # Check if remaining counts are non-negative
             if np.any(remaining_counts < 0):
                 continue
-            
+
+            # When stealing a word, the new word must be strictly longer
+            if word_set:
+                stolen_word = word_set[0][2]  # (p, w_idx, word_obj)
+                if len(word) <= len(stolen_word.word):
+                    continue
+
             # Check if remaining letters can be obtained from pool
             if np.all(remaining_counts <= pool_counts):
                 # Found a valid combination - now construct move and state
