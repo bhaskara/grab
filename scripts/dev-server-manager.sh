@@ -2,8 +2,15 @@
 
 # Grab Game Development Server Manager
 #
-# Manages the React dev server, and optionally firewall settings for external
-# access (Linux/server environments only).
+# NOTE: For local Mac development, prefer using honcho instead:
+#
+#   honcho start          (from the repo root)
+#
+# honcho starts both Flask and React together with color-coded, prefixed logs
+# and clean Ctrl-C shutdown.  See the repo-root Procfile for details.
+#
+# This script remains useful for Linux/server environments where UFW firewall
+# management is needed, or when you want to run the React dev server alone.
 #
 # Usage:
 #   ./dev-server-manager.sh [--firewall]

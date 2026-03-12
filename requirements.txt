@@ -8,3 +8,4 @@ pytest==7.4.2
 pytest-flask==1.2.0
 requests==2.31.0
 python-socketio[client]==5.8.0
+honcho
