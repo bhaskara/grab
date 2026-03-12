@@ -68,7 +68,11 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername, au
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (disabled || !input.trim()) return;
+    if (disabled) return;
+    if (!input.trim()) {
+      onPass();
+      return;
+    }
 
     const command = input.trim().toLowerCase();
     
@@ -77,21 +81,21 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername, au
     setHistoryIndex(-1);
     
     // Handle different commands
-    if (command === '!ready' || command === '!r' || command === '!pass') {
+    if (command === '!ready') {
       onPass();
     } else if (command === '!end' || command === '!e') {
       handleEndGame();
     } else if (command === '!help') {
       // Help will be handled by GameLog
       if (onAddGameEvent) {
-        onAddGameEvent('system', 'Commands: word (letters only), !ready/!r, !end/!e, !help');
+        onAddGameEvent('system', 'Commands: word (letters only), !ready, !end/!e, !help');
       }
     } else if (command.match(/^[a-z]+$/)) {
       // Valid word (only lowercase letters)
       onSubmitWord(command);
     } else {
       if (onAddGameEvent) {
-        onAddGameEvent('error', 'Invalid command. Use: word (letters only), !ready/!r, !end/!e, !help');
+        onAddGameEvent('error', 'Invalid command. Use: word (letters only), !ready, !end/!e, !help');
       }
     }
     
@@ -155,7 +159,7 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername, au
           💬 Command Input
         </h3>
         <div style={{ fontSize: '12px', color: '#888', marginBottom: '15px' }}>
-          Type a word to play, or use <code style={{backgroundColor: '#333', padding: '1px 4px'}}>!ready</code> to pass turn • <code style={{backgroundColor: '#333', padding: '1px 4px'}}>!help</code> for help
+          Type a word to play, or press Enter on empty input (or <code style={{backgroundColor: '#333', padding: '1px 4px'}}>!ready</code>) to pass turn • <code style={{backgroundColor: '#333', padding: '1px 4px'}}>!help</code> for help
         </div>
       </div>
 
@@ -170,7 +174,7 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername, au
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder={disabled ? "Game not active..." : "enter word, !ready/!r, or !end/!e"}
+          placeholder={disabled ? "Game not active..." : "enter word (or empty+Enter to pass)"}
           style={{
             ...inputStyle,
             opacity: disabled ? 0.5 : 1,
@@ -202,7 +206,7 @@ function WordInput({ onSubmitWord, onPass, disabled, gameId, currentUsername, au
       }}>
         <div><strong>Commands:</strong></div>
         <div>• <code>word</code> - Make a word (letters a-z only)</div>
-        <div>• <code>!ready</code>, <code>!r</code>, or <code>!pass</code> - Ready for next turn</div>
+        <div>• <code>!ready</code> or empty Enter - Ready for next turn</div>
         <div>• <code>!end</code> or <code>!e</code> - End the game (creator only)</div>
         <div>• <code>!help</code> - Show help information</div>
         <div>• <kbd>↑↓</kbd> - Navigate command history</div>

@@ -24,7 +24,7 @@ function GameInterface({
   // Add initial welcome message (only once per game)
   useEffect(() => {
     if (gameState && onAddGameEvent && !hasShownWelcome) {
-      onAddGameEvent('system', `Welcome to game ${gameState.game_id}! Type a word to play or !ready to pass.`);
+      onAddGameEvent('system', `Welcome to game ${gameState.game_id}! Type a word to play, or press Enter on empty input (or !ready) to pass.`);
       setHasShownWelcome(true);
     }
   }, [gameState?.game_id, onAddGameEvent, hasShownWelcome]);
@@ -305,7 +305,7 @@ function GameInterface({
           <li>Form words using available letters from the pool and/or other players' words</li>
           <li>You can steal one existing word from any player to create a new word</li>
           <li>Type your word in the command input and press Enter</li>
-          <li>Use <code style={{backgroundColor: '#333', padding: '1px 4px'}}>!ready</code> when you can't make any more words</li>
+          <li>Press Enter on empty input (or type <code style={{backgroundColor: '#333', padding: '1px 4px'}}>!ready</code>) when you can't make any more words</li>
           <li>Game advances to the next turn when all players are ready</li>
         </ul>
       </div>

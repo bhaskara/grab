@@ -17,7 +17,7 @@ Commands after login:
 
 In game mode:
     <word> - Attempt to make a word
-    !ready or !r - Mark ready for next turn
+    !ready - Mark ready for next turn
     !print or !p - Get current game status
     !start or !s - Start a game (creator only)
     !end or !e - End the game (creator only)
@@ -435,7 +435,7 @@ class GrabSocketIOClient:
     def enter_game_mode(self, game_id: str):
         """Enter interactive game mode."""
         print(f"\n🎮 Entering game mode for {game_id}")
-        print("Commands: <word> to make a move, !ready/!r for next turn, !print/!p for state, !start/!s to start game, !end/!e to end game, !quit/!q to leave")
+        print("Commands: <word> to make a move, !ready for next turn, !print/!p for state, !start/!s to start game, !end/!e to end game, !quit/!q to leave")
         
         self.current_game_id = game_id
         self.game_active = True
@@ -462,7 +462,7 @@ class GrabSocketIOClient:
                         break
                     elif action in ['print', 'p']:
                         self.sio.emit('get_status')
-                    elif action in ['ready', 'r']:
+                    elif action in ['ready']:
                         self.sio.emit('player_action', {'data': 'ready_for_next_turn'})
                         print("✓ Marked as ready for next turn")
                     elif action in ['start', 's']:
@@ -479,7 +479,7 @@ class GrabSocketIOClient:
                             print("✗ Failed to end game (you may not be the creator)")
                     else:
                         print(f"Unknown action: !{action}")
-                        print("Available actions: !ready/!r, !print/!p, !start/!s, !end/!e, !quit/!q")
+                        print("Available actions: !ready, !print/!p, !start/!s, !end/!e, !quit/!q")
                 else:
                     # Treat as a word move
                     self.sio.emit('move', {'data': command.lower()})
