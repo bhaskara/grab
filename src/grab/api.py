@@ -14,7 +14,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_socketio import emit, join_room
 from loguru import logger
 from .game_server import GameServer
-from .grab_state import DrawLetters
+from .grab_state import DrawLetters, TILESETS
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -120,14 +120,19 @@ def create_game():
     max_players = data.get('max_players', 4)
     time_limit_seconds = data.get('time_limit_seconds', 300)
     next_letters = data.get('next_letters')
-    
+    tileset = data.get('tileset', 'standard')
+
     # Validate parameters
     if not isinstance(max_players, int) or max_players < 1 or max_players > 8:
         return jsonify({'success': False, 'error': 'Invalid max_players (must be 1-8)'}), 400
     
     if not isinstance(time_limit_seconds, int) or time_limit_seconds < 30:
         return jsonify({'success': False, 'error': 'Invalid time_limit_seconds (must be >= 30)'}), 400
-    
+
+    # Validate tileset
+    if tileset not in TILESETS:
+        return jsonify({'success': False, 'error': f'Invalid tileset "{tileset}". Must be one of: {sorted(TILESETS.keys())}'}), 400
+
     # Validate next_letters if provided
     if next_letters is not None:
         if not isinstance(next_letters, list):
@@ -148,7 +153,8 @@ def create_game():
         max_players=max_players,
         time_limit_seconds=time_limit_seconds,
         game_type=game_type,
-        next_letters=next_letters
+        next_letters=next_letters,
+        tileset=tileset
     )
     
     game_data = game_server.get_game_metadata(game_id)
@@ -163,6 +169,7 @@ def create_game():
             'status': game_data['status'],
             'max_players': game_data['max_players'],
             'time_limit_seconds': game_data['time_limit_seconds'],
+            'tileset': game_data['tileset'],
             'created_at': game_data['created_at']
         }
     }), 201
@@ -304,9 +311,10 @@ def start_game(game_id):
         game_object = DummyGrab(list(players))
     elif game_type == 'grab':
         from .grab_game import Grab
-        # Get next_letters from game metadata
+        # Get next_letters and tileset from game metadata
         next_letters = game_data.get('next_letters')
-        game_object = Grab(num_players=len(players), next_letters=next_letters)
+        tileset = game_data.get('tileset', 'standard')
+        game_object = Grab(num_players=len(players), next_letters=next_letters, tileset=tileset)
         
         if test_letters:
             # For testing: set specific letters in the pool

@@ -50,17 +50,36 @@ class GameServer(object):
         game = self.games[game_id]
         return game['state'], game['players'].copy()
 
-    def add_game(self, creator_id=None, creator_username=None, max_players=4, time_limit_seconds=300, game_type='dummy', next_letters=None) -> str:
+    def add_game(self, creator_id=None, creator_username=None, max_players=4, time_limit_seconds=300, game_type='dummy', next_letters=None, tileset='standard') -> str:
         """Add a new game and return its ID.
 
-        For now, IDs are consecutively increasing integers (converted to str).
+        Parameters
+        ----------
+        creator_id : str, optional
+            UUID of the player creating the game
+        creator_username : str, optional
+            Username of the player creating the game
+        max_players : int, optional
+            Maximum number of players allowed. Defaults to 4.
+        time_limit_seconds : int, optional
+            Time limit per turn in seconds. Defaults to 300.
+        game_type : str, optional
+            Type of game ('dummy' or 'grab'). Defaults to 'dummy'.
+        next_letters : list, optional
+            Predetermined letters to draw in order (for testing)
+        tileset : str, optional
+            Name of the tileset to use ('standard' or 'reduced'). Defaults to 'standard'.
 
+        Returns
+        -------
+        str
+            The ID of the newly created game
         """
         from datetime import datetime, timezone
-        
+
         game_id = str(self.next_game_id)
         self.next_game_id += 1
-        
+
         self.games[game_id] = {
             'state': 'setup',
             'players': [],
@@ -71,6 +90,7 @@ class GameServer(object):
             'time_limit_seconds': time_limit_seconds,
             'game_type': game_type,
             'next_letters': next_letters,
+            'tileset': tileset,
             'created_at': datetime.now(timezone.utc).isoformat() + 'Z',
             'started_at': None,
             'finished_at': None

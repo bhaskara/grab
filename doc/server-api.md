@@ -107,7 +107,8 @@ Authorization: Bearer <session_token>
 ```json
 {
   "max_players": 4,  // optional, defaults to 4
-  "time_limit_seconds": 300  // optional, defaults to 300 (5 minutes per turn)
+  "time_limit_seconds": 300,  // optional, defaults to 300 (5 minutes per turn)
+  "tileset": "standard"  // optional, "standard" (100 tiles) or "reduced" (~20 tiles)
 }
 ```
 
@@ -121,6 +122,7 @@ Authorization: Bearer <session_token>
     "status": "waiting",  // waiting, active, finished
     "max_players": 4,
     "time_limit_seconds": 300,
+    "tileset": "standard",
     "created_at": "2025-06-11T10:30:00Z"
   }
 }
@@ -128,7 +130,7 @@ Authorization: Bearer <session_token>
 
 **Errors:**
 - `401` - Invalid or missing session token
-- `400` - Invalid game parameters
+- `400` - Invalid game parameters (including invalid tileset name)
 
 ---
 

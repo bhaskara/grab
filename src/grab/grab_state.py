@@ -39,6 +39,41 @@ STANDARD_SCRABBLE_DISTRIBUTION = np.array([
     1   # Z
 ], dtype=int)
 
+# Reduced tileset: each letter count divided by 5, rounded to nearest integer.
+# This gives roughly 20 tiles total, enabling shorter/faster games.
+REDUCED_SCRABBLE_DISTRIBUTION = np.round(STANDARD_SCRABBLE_DISTRIBUTION / 5).astype(int)
+
+# Map of tileset names to their bag distributions
+TILESETS = {
+    "standard": STANDARD_SCRABBLE_DISTRIBUTION,
+    "reduced": REDUCED_SCRABBLE_DISTRIBUTION,
+}
+
+
+def get_tileset(name: str) -> np.ndarray:
+    """Look up a tileset by name and return a copy of its letter distribution.
+
+    Parameters
+    ----------
+    name : str
+        The tileset name (e.g. "standard" or "reduced")
+
+    Returns
+    -------
+    np.ndarray
+        A copy of the 26-element integer array representing letter counts
+
+    Raises
+    ------
+    ValueError
+        If the tileset name is not recognized
+    """
+    if name not in TILESETS:
+        raise ValueError(
+            f"Unknown tileset '{name}'. Must be one of: {sorted(TILESETS.keys())}"
+        )
+    return TILESETS[name].copy()
+
 
 @dataclass
 class State(object):

@@ -5,7 +5,7 @@ Unit tests for Grab game logic and scoring
 import unittest
 import numpy as np
 from src.grab.grab_game import Grab, SCRABBLE_LETTER_SCORES, NoWordFoundException, DisallowedWordException
-from src.grab.grab_state import State, Word, MakeWord, DrawLetters
+from src.grab.grab_state import State, Word, MakeWord, DrawLetters, STANDARD_SCRABBLE_DISTRIBUTION, REDUCED_SCRABBLE_DISTRIBUTION
 
 
 class TestGrab(unittest.TestCase):
@@ -1032,6 +1032,30 @@ class TestGrab(unittest.TestCase):
             # If this fails, it means "aa" is in dictionary and suffix check triggered
             # This is also valid behavior
             pass
+
+
+    def test_grab_default_tileset(self):
+        """Test that Grab uses the standard tileset by default."""
+        game = Grab()
+        np.testing.assert_array_equal(game.state.bag, STANDARD_SCRABBLE_DISTRIBUTION)
+
+    def test_grab_standard_tileset_explicit(self):
+        """Test that explicitly requesting 'standard' tileset matches default."""
+        game = Grab(tileset="standard")
+        np.testing.assert_array_equal(game.state.bag, STANDARD_SCRABBLE_DISTRIBUTION)
+
+    def test_grab_reduced_tileset(self):
+        """Test that the 'reduced' tileset uses the reduced distribution."""
+        game = Grab(tileset="reduced")
+        np.testing.assert_array_equal(game.state.bag, REDUCED_SCRABBLE_DISTRIBUTION)
+        # Reduced tileset should have roughly 20 tiles total
+        self.assertLess(np.sum(game.state.bag), np.sum(STANDARD_SCRABBLE_DISTRIBUTION))
+
+    def test_grab_invalid_tileset(self):
+        """Test that an unknown tileset name raises ValueError."""
+        with self.assertRaises(ValueError) as context:
+            Grab(tileset="nonexistent")
+        self.assertIn("Unknown tileset", str(context.exception))
 
 
 if __name__ == '__main__':

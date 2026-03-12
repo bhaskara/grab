@@ -2,7 +2,7 @@ from typing import Set, Union, Optional, Tuple, List
 import os
 import random
 import numpy as np
-from .grab_state import State, Word, MakeWord, DrawLetters, Move
+from .grab_state import State, Word, MakeWord, DrawLetters, Move, get_tileset
 
 
 class NoWordFoundException(Exception):
@@ -79,9 +79,9 @@ class Grab(object):
     
     """
 
-    def __init__(self, num_players: int = 2, word_list: str = 'twl06', letter_scores: np.ndarray = None, next_letters: Optional[List[str]] = None, disallow_common_suffixes: bool = True):
+    def __init__(self, num_players: int = 2, word_list: str = 'twl06', letter_scores: np.ndarray = None, next_letters: Optional[List[str]] = None, disallow_common_suffixes: bool = True, tileset: str = "standard"):
         """Initialize a Grab game instance.
-        
+
         Parameters
         ----------
         num_players : int, optional
@@ -93,27 +93,39 @@ class Grab(object):
             Length-26 array containing per-letter scores (a=0, b=1, ..., z=25).
             Defaults to standard Scrabble letter scores.
         next_letters : List[str], optional
-            Initial list of letters to be drawn in order before falling back to random 
+            Initial list of letters to be drawn in order before falling back to random
             sampling. If None, creates empty list.
         disallow_common_suffixes : bool, optional
             If True, disallow words that end with common suffixes if the root word
             is also in the dictionary. Defaults to True.
+        tileset : str, optional
+            Name of the tileset to use for the bag distribution. Either 'standard'
+            (100-tile Scrabble distribution) or 'reduced' (~20 tiles). Defaults to
+            'standard'.
+
+        Raises
+        ------
+        ValueError
+            If num_players < 1, letter_scores has wrong length, or tileset is unknown
         """
         if num_players < 1:
             raise ValueError("Number of players must be at least 1")
-        
+
         if letter_scores is None:
             self.letter_scores = SCRABBLE_LETTER_SCORES.copy()
         else:
             if len(letter_scores) != 26:
                 raise ValueError("letter_scores must be a length-26 array")
             self.letter_scores = np.array(letter_scores)
-        
+
         self.valid_words = load_word_list(word_list)
         self.disallow_common_suffixes = disallow_common_suffixes
-        
+
+        # Resolve the tileset name to a bag distribution array
+        bag = get_tileset(tileset)
+
         # Initialize the game state to the starting state
-        self._state = State(num_players=num_players, next_letters=next_letters)
+        self._state = State(num_players=num_players, bag=bag, next_letters=next_letters)
 
     def _has_common_suffix(self, word: str) -> bool:
         """Check if a word has a common suffix and the root word is also valid.

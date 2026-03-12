@@ -319,6 +319,39 @@ class TestGameManagement:
         data = json.loads(response.data)
         assert data['success'] is True
     
+    def test_create_game_with_tileset(self, client, auth_headers):
+        """Test game creation with a specific tileset."""
+        response = client.post('/api/games',
+                              json={'tileset': 'reduced'},
+                              headers=auth_headers,
+                              content_type='application/json')
+        assert response.status_code == 201
+        data = json.loads(response.data)
+        assert data['success'] is True
+        assert data['data']['tileset'] == 'reduced'
+
+    def test_create_game_default_tileset(self, client, auth_headers):
+        """Test game creation defaults to 'standard' tileset."""
+        response = client.post('/api/games',
+                              json={},
+                              headers=auth_headers,
+                              content_type='application/json')
+        assert response.status_code == 201
+        data = json.loads(response.data)
+        assert data['success'] is True
+        assert data['data']['tileset'] == 'standard'
+
+    def test_create_game_invalid_tileset(self, client, auth_headers):
+        """Test game creation with invalid tileset returns 400."""
+        response = client.post('/api/games',
+                              json={'tileset': 'nonexistent'},
+                              headers=auth_headers,
+                              content_type='application/json')
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data['success'] is False
+        assert 'Invalid tileset' in data['error']
+
     def test_get_game_success(self, client, auth_headers):
         """Test successful game retrieval."""
         # Create a game first
@@ -461,6 +494,33 @@ class TestGameManagement:
         assert data['success'] is False
         assert 'not enough players' in data['error']
     
+    def test_start_game_with_reduced_tileset(self, client, auth_headers, app):
+        """Test that starting a game with reduced tileset results in a smaller bag."""
+        # Create a game with reduced tileset and predetermined letters
+        # Use letters that exist in the reduced distribution (a=2, e=2, i=2)
+        create_response = client.post('/api/games',
+                                     json={'tileset': 'reduced', 'next_letters': ['a', 'e', 'i']},
+                                     headers=auth_headers,
+                                     content_type='application/json')
+        assert create_response.status_code == 201
+        game_id = json.loads(create_response.data)['data']['game_id']
+
+        # Join the game with Socket.IO
+        sio_client = create_test_socketio_connection(app, auth_headers)
+        join_response = client.post(f'/api/games/{game_id}/join', headers=auth_headers)
+        assert join_response.status_code == 200
+
+        # Start the game (as grab type)
+        with patch.dict(app.config, {'GAME_TYPE': 'grab'}):
+            response = client.post(f'/api/games/{game_id}/start', headers=auth_headers)
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['success'] is True
+        assert data['data']['status'] == 'active'
+
+        sio_client.disconnect()
+
     def test_stop_game_success(self, client, auth_headers):
         """Test successful game stop."""
         # Create a game
