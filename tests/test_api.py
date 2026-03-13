@@ -438,7 +438,58 @@ class TestGameManagement:
         
         # Clean up
         sio_client.disconnect()
-    
+
+    def test_get_game_includes_tileset(self, client, auth_headers):
+        """Test that GET /api/games/<game_id> includes tileset in response."""
+        # Create a game with reduced tileset
+        create_response = client.post('/api/games',
+                                      json={'tileset': 'reduced'},
+                                      headers=auth_headers,
+                                      content_type='application/json')
+        assert create_response.status_code == 201
+        game_id = json.loads(create_response.data)['data']['game_id']
+
+        # Get the game and verify tileset is present
+        response = client.get(f'/api/games/{game_id}', headers=auth_headers)
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['data']['tileset'] == 'reduced'
+
+    def test_get_game_default_tileset(self, client, auth_headers):
+        """Test that GET /api/games/<game_id> returns 'standard' as default tileset."""
+        create_response = client.post('/api/games',
+                                      json={},
+                                      headers=auth_headers,
+                                      content_type='application/json')
+        assert create_response.status_code == 201
+        game_id = json.loads(create_response.data)['data']['game_id']
+
+        response = client.get(f'/api/games/{game_id}', headers=auth_headers)
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['data']['tileset'] == 'standard'
+
+    def test_get_all_games_includes_tileset(self, client, auth_headers):
+        """Test that GET /api/games includes tileset for each game."""
+        # Create games with different tilesets
+        client.post('/api/games',
+                    json={'tileset': 'standard'},
+                    headers=auth_headers,
+                    content_type='application/json')
+        client.post('/api/games',
+                    json={'tileset': 'reduced'},
+                    headers=auth_headers,
+                    content_type='application/json')
+
+        response = client.get('/api/games', headers=auth_headers)
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        games = data['data']['games']
+        assert len(games) == 2
+
+        tilesets = {game['tileset'] for game in games}
+        assert tilesets == {'standard', 'reduced'}
+
     def test_start_game_success(self, client, auth_headers, app):
         """Test successful game start."""
         # Create a game

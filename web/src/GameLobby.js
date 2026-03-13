@@ -9,6 +9,8 @@ function GameLobby({ serverUrl, authToken, onGameJoined, onGameCreated }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
+  const [showCreatePanel, setShowCreatePanel] = useState(false);
+  const [selectedTileset, setSelectedTileset] = useState('standard');
 
   // Fetch games list
   const fetchGames = async () => {
@@ -53,7 +55,8 @@ function GameLobby({ serverUrl, authToken, onGameJoined, onGameCreated }) {
         },
         body: JSON.stringify({
           max_players: 4,
-          time_limit_seconds: 300
+          time_limit_seconds: 300,
+          tileset: selectedTileset
         })
       });
 
@@ -63,6 +66,9 @@ function GameLobby({ serverUrl, authToken, onGameJoined, onGameCreated }) {
 
       const result = await response.json();
       if (result.success) {
+        // Close panel and reset settings
+        setShowCreatePanel(false);
+        setSelectedTileset('standard');
         // Notify parent about game creation and refresh games list
         if (onGameCreated) {
           onGameCreated(result.data.game_id);
@@ -137,28 +143,28 @@ function GameLobby({ serverUrl, authToken, onGameJoined, onGameCreated }) {
       <h2>🎮 Game Lobby</h2>
       
       <div style={{ marginBottom: '20px' }}>
-        <button 
-          onClick={createGame}
+        <button
+          onClick={() => setShowCreatePanel(!showCreatePanel)}
           disabled={creating}
-          style={{ 
-            padding: '12px 24px', 
-            fontSize: '16px', 
-            backgroundColor: creating ? '#666' : '#007acc',
+          style={{
+            padding: '12px 24px',
+            fontSize: '16px',
+            backgroundColor: showCreatePanel ? '#666' : '#007acc',
             color: '#fff',
             border: 'none',
             borderRadius: '4px',
             cursor: creating ? 'not-allowed' : 'pointer'
           }}
         >
-          {creating ? 'Creating...' : '➕ Create New Game'}
+          {showCreatePanel ? 'Cancel' : '➕ Create New Game'}
         </button>
-        
-        <button 
+
+        <button
           onClick={fetchGames}
           disabled={loading}
-          style={{ 
-            padding: '12px 24px', 
-            fontSize: '16px', 
+          style={{
+            padding: '12px 24px',
+            fontSize: '16px',
             backgroundColor: '#444',
             color: '#fff',
             border: 'none',
@@ -169,6 +175,53 @@ function GameLobby({ serverUrl, authToken, onGameJoined, onGameCreated }) {
         >
           {loading ? 'Refreshing...' : '🔄 Refresh'}
         </button>
+
+        {showCreatePanel && (
+          <div style={{
+            marginTop: '10px',
+            padding: '15px',
+            backgroundColor: '#2a2a2a',
+            borderRadius: '8px',
+            border: '1px solid #444'
+          }}>
+            <div style={{ marginBottom: '12px' }}>
+              <label htmlFor="tileset-select" style={{ marginRight: '10px', fontSize: '14px' }}>
+                Tileset:
+              </label>
+              <select
+                id="tileset-select"
+                value={selectedTileset}
+                onChange={(e) => setSelectedTileset(e.target.value)}
+                style={{
+                  padding: '6px 10px',
+                  fontSize: '14px',
+                  backgroundColor: '#333',
+                  color: '#fff',
+                  border: '1px solid #555',
+                  borderRadius: '4px'
+                }}
+              >
+                <option value="standard">Standard (100 tiles)</option>
+                <option value="reduced">Reduced (~20 tiles)</option>
+              </select>
+            </div>
+            <button
+              onClick={createGame}
+              disabled={creating}
+              style={{
+                padding: '8px 16px',
+                fontSize: '14px',
+                backgroundColor: creating ? '#666' : '#28a745',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: creating ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {creating ? 'Creating...' : 'Create Game'}
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -217,9 +270,14 @@ function GameLobby({ serverUrl, authToken, onGameJoined, onGameCreated }) {
                       Status: <strong>{game.status.toUpperCase()}</strong>
                     </div>
                     <div style={{ color: '#ccc', fontSize: '14px', marginTop: '5px' }}>
-                      Players: {game.current_players.length}/{game.max_players} | 
+                      Players: {game.current_players.length}/{game.max_players} |
                       Created: {formatDate(game.created_at)}
                       {game.started_at && ` | Started: ${formatDate(game.started_at)}`}
+                      {game.tileset && game.tileset !== 'standard' && (
+                        <span style={{ color: '#ffa500', marginLeft: '5px' }}>
+                          | {game.tileset.charAt(0).toUpperCase() + game.tileset.slice(1)} tileset
+                        </span>
+                      )}
                     </div>
                     {game.current_players.length > 0 && (
                       <div style={{ color: '#aaa', fontSize: '12px', marginTop: '5px' }}>
