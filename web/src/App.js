@@ -21,6 +21,7 @@ function App() {
   const [gameCreator, setGameCreator] = useState(null);
   const [showGameOver, setShowGameOver] = useState(false);
   const [gameOverData, setGameOverData] = useState(null);
+  const [gameEndPending, setGameEndPending] = useState(false);
 
   // Generate random username on component mount
   useEffect(() => {
@@ -126,32 +127,42 @@ function App() {
       console.log('Game ending:', data);
       const reason = data.reason === 'bag_empty' ? 'All letters used' : 'Game stopped by creator';
       addGameEvent('game_event', `Game ending: ${reason}`);
-      
-      // Show game over screen with final data
-      setGameOverData({
+
+      // Store game over data for later display
+      const overData = {
         reason: reason,
         final_scores: data.final_scores || {},
         winner: data.winner || null,
         final_game_state: data.final_game_state || gameState
-      });
-      setShowGameOver(true);
-      
+      };
+      setGameOverData(overData);
+
       // Update game state with final scores if provided
       if (data.final_game_state) {
         setGameState(data.final_game_state);
       }
-      
-      // Auto-return to lobby after 5 seconds
-      setTimeout(() => {
-        setShowGameOver(false);
-        setGameOverData(null);
-        setInGame(false);
-        setGameState(null);
-        setCurrentGameId(null);
-        setGameEvents([]);
-        setGameCreator(null);
-        setShowLobby(true);
-      }, 5000);
+
+      if (data.reason === 'bag_empty') {
+        // Natural game end: don't show game over screen yet.
+        // The game creator must click "End Game" to transition.
+        setGameEndPending(true);
+      } else {
+        // Creator-initiated stop: show game over screen immediately
+        setShowGameOver(true);
+
+        // Auto-return to lobby after 5 seconds
+        setTimeout(() => {
+          setShowGameOver(false);
+          setGameOverData(null);
+          setInGame(false);
+          setGameState(null);
+          setCurrentGameId(null);
+          setGameEvents([]);
+          setGameCreator(null);
+          setGameEndPending(false);
+          setShowLobby(true);
+        }, 5000);
+      }
     });
   };
 
@@ -263,7 +274,26 @@ function App() {
     setGameCreator(null);
     setShowGameOver(false);
     setGameOverData(null);
+    setGameEndPending(false);
     setShowLobby(true);
+  };
+
+  // Called by the game creator to confirm showing the game over screen
+  const handleShowGameOver = () => {
+    setShowGameOver(true);
+    setGameEndPending(false);
+
+    // Auto-return to lobby after 5 seconds
+    setTimeout(() => {
+      setShowGameOver(false);
+      setGameOverData(null);
+      setInGame(false);
+      setGameState(null);
+      setCurrentGameId(null);
+      setGameEvents([]);
+      setGameCreator(null);
+      setShowLobby(true);
+    }, 5000);
   };
 
   // Helper function to add game events
@@ -293,7 +323,7 @@ function App() {
   if (inGame && gameState && connected && isLoggedIn) {
     return (
       <div className="App">
-        <GameInterface 
+        <GameInterface
           gameState={gameState}
           socket={socket}
           currentUsername={username}
@@ -303,6 +333,8 @@ function App() {
           gameCreator={gameCreator}
           onAddGameEvent={addGameEvent}
           onLeaveGame={handleLeaveGame}
+          gameEndPending={gameEndPending}
+          onShowGameOver={handleShowGameOver}
         />
       </div>
     );

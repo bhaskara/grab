@@ -1346,6 +1346,243 @@ class TestServerClientFlow:
         print(f"  - Game started and drew initial letters correctly")
         print(f"  - Predetermined letters were used in order")
         print(f"  - Random sampling works after predetermined letters exhausted")
-        
+
         # Clean up
         sio_client.disconnect()
+
+
+class TestGameEnd:
+    """Tests for natural game-end behaviour when the bag empties and all players pass."""
+
+    def _play_to_game_end(self, client, app):
+        """Set up a 2-player reduced-tileset game and play it to natural completion.
+
+        The reduced tileset has 16 tiles: a(2) d(1) e(2) g(1) i(2) l(1) n(1)
+        o(2) r(1) s(1) t(1) u(1).  We control the draw order via
+        ``next_letters`` so the test is fully deterministic.
+
+        Sequence of play:
+        1. Game starts → 3 letters drawn (first 3 of next_letters), 13 remain.
+        2. Both players pass 13 times → all remaining letters drawn into pool.
+        3. Player 2 (clientB, index 1) makes "age" from the pool (score 4).
+        4. Player 1 (clientA, index 0) steals "age" + pool "l" to make "gale"
+           (score 5).  Player 2 loses "age".
+        5. Both players pass → bag empty & all passed → game should end.
+
+        Final scores (with end-of-game bonus):
+        - clientA: 5 (gale) + 5 (bonus for owning gale) = 10
+        - clientB: 4 (age) + 0 (no words at end) = 4
+
+        Returns
+        -------
+        dict
+            Keys: ``game_id``, ``client``, ``app``, ``sio_a``, ``sio_b``,
+            ``received_a``, ``received_b`` (messages after the final pass that
+            triggers game end).
+        """
+        # All 16 letters in a fixed draw order
+        all_letters = [
+            'a', 'd', 'e',   # drawn at game start (3)
+            'g', 'i', 'l',   # rounds 1-3
+            'n', 'o', 'r',   # rounds 4-6
+            's', 't', 'u',   # rounds 7-9
+            'a', 'e', 'i',   # rounds 10-12
+            'o',              # round 13
+        ]
+
+        # --- authenticate two players ---
+        resp_a = client.post('/api/auth/login',
+                             json={'username': 'clientA'},
+                             content_type='application/json')
+        assert resp_a.status_code == 200
+        token_a = json.loads(resp_a.data)['data']['session_token']
+        headers_a = {'Authorization': f'Bearer {token_a}'}
+
+        resp_b = client.post('/api/auth/login',
+                             json={'username': 'clientB'},
+                             content_type='application/json')
+        assert resp_b.status_code == 200
+        token_b = json.loads(resp_b.data)['data']['session_token']
+        headers_b = {'Authorization': f'Bearer {token_b}'}
+
+        # --- create game with reduced tileset and predetermined letters ---
+        create_resp = client.post('/api/games',
+                                  json={
+                                      'max_players': 2,
+                                      'tileset': 'reduced',
+                                      'next_letters': all_letters,
+                                  },
+                                  headers=headers_a,
+                                  content_type='application/json')
+        assert create_resp.status_code == 201
+        game_id = json.loads(create_resp.data)['data']['game_id']
+
+        # --- connect via Socket.IO and join ---
+        sio_a = app.socketio.test_client(app)
+        sio_a.connect(auth={'token': token_a})
+        join_a = client.post(f'/api/games/{game_id}/join', headers=headers_a)
+        assert join_a.status_code == 200
+
+        sio_b = app.socketio.test_client(app)
+        sio_b.connect(auth={'token': token_b})
+        join_b = client.post(f'/api/games/{game_id}/join', headers=headers_b)
+        assert join_b.status_code == 200
+
+        # --- start game (draws 3 letters, 13 remain) ---
+        start_resp = client.post(f'/api/games/{game_id}/start',
+                                 headers=headers_a)
+        assert start_resp.status_code == 200
+
+        # drain startup messages
+        sio_a.get_received()
+        sio_b.get_received()
+
+        # --- both players pass 13 times to empty the bag ---
+        for _ in range(13):
+            sio_a.emit('player_action', {'data': 'ready_for_next_turn'})
+            sio_a.get_received()
+            sio_b.get_received()
+
+            sio_b.emit('player_action', {'data': 'ready_for_next_turn'})
+            sio_a.get_received()
+            sio_b.get_received()
+
+        # --- player B makes "age" (a=1, g=2, e=1 → score 4) ---
+        sio_b.emit('move', {'data': 'age'})
+        sio_a.get_received()
+        sio_b.get_received()
+
+        # --- player A steals "age" and adds pool "l" to make "gale" ---
+        # gale = g(2) + a(1) + l(1) + e(1) = 5 points
+        sio_a.emit('move', {'data': 'gale'})
+        sio_a.get_received()
+        sio_b.get_received()
+
+        # --- both players pass → bag empty, all passed → game should end ---
+        sio_a.emit('player_action', {'data': 'ready_for_next_turn'})
+        sio_a.get_received()
+        sio_b.get_received()
+
+        # Clear before the final pass so we capture game-end events
+        sio_a.get_received()
+        sio_b.get_received()
+
+        sio_b.emit('player_action', {'data': 'ready_for_next_turn'})
+        received_a = sio_a.get_received()
+        received_b = sio_b.get_received()
+
+        return {
+            'game_id': game_id,
+            'client': client,
+            'app': app,
+            'sio_a': sio_a,
+            'sio_b': sio_b,
+            'headers_a': headers_a,
+            'headers_b': headers_b,
+            'received_a': received_a,
+            'received_b': received_b,
+        }
+
+    def test_game_ends_when_bag_empty_and_all_pass(self, client, app):
+        """Verify natural game end emits game_ending with correct scores."""
+        result = self._play_to_game_end(client, app)
+
+        # --- check game_ending event was received ---
+        game_ending_msg = None
+        for msg in result['received_a']:
+            if msg['name'] == 'game_ending':
+                game_ending_msg = msg
+                break
+
+        assert game_ending_msg is not None, (
+            f"Expected game_ending event. Received events: "
+            f"{[m['name'] for m in result['received_a']]}"
+        )
+
+        payload = game_ending_msg['args'][0]
+        assert payload['reason'] == 'bag_empty'
+        assert payload['winner'] == 'clientA'
+
+        final_scores = payload['final_scores']
+        # clientA: 5 (gale) + 5 (bonus) = 10
+        assert final_scores['clientA'] == 10, f"Expected clientA=10, got {final_scores['clientA']}"
+        # clientB: 4 (age, then stolen) + 0 (no bonus) = 4
+        assert final_scores['clientB'] == 4, f"Expected clientB=4, got {final_scores['clientB']}"
+
+        # --- check final game state has 'finished' status ---
+        game_state_msg = None
+        for msg in result['received_a']:
+            if msg['name'] == 'game_state':
+                game_state_msg = msg
+                break
+
+        assert game_state_msg is not None
+        assert game_state_msg['args'][0]['data']['status'] == 'finished'
+
+        # Clean up
+        result['sio_a'].disconnect()
+        result['sio_b'].disconnect()
+
+    def test_reject_player_action_on_finished_game(self, client, app):
+        """After natural game end, player_action should be rejected."""
+        result = self._play_to_game_end(client, app)
+
+        # Record scores from the game_ending event
+        game_ending_msg = None
+        for msg in result['received_a']:
+            if msg['name'] == 'game_ending':
+                game_ending_msg = msg
+                break
+        assert game_ending_msg is not None
+        scores_before = game_ending_msg['args'][0]['final_scores'].copy()
+
+        # Attempt another ready action
+        result['sio_a'].get_received()
+        result['sio_a'].emit('player_action', {'data': 'ready_for_next_turn'})
+        received = result['sio_a'].get_received()
+
+        # Should receive an error
+        error_msg = None
+        for msg in received:
+            if msg['name'] == 'error':
+                error_msg = msg
+                break
+
+        assert error_msg is not None, (
+            f"Expected error event. Received: {[m['name'] for m in received]}"
+        )
+        assert 'Game has ended' in error_msg['args'][0]['message']
+
+        # Scores must not have changed — no game_state broadcast
+        game_state_msgs = [m for m in received if m['name'] == 'game_state']
+        assert len(game_state_msgs) == 0, "No game_state should be broadcast after game ended"
+
+        # Clean up
+        result['sio_a'].disconnect()
+        result['sio_b'].disconnect()
+
+    def test_reject_move_on_finished_game(self, client, app):
+        """After natural game end, move events should be rejected."""
+        result = self._play_to_game_end(client, app)
+
+        # Attempt a move after the game ended
+        result['sio_a'].get_received()
+        result['sio_a'].emit('move', {'data': 'test'})
+        received = result['sio_a'].get_received()
+
+        # Should receive move_result with success=False
+        move_result_msg = None
+        for msg in received:
+            if msg['name'] == 'move_result':
+                move_result_msg = msg
+                break
+
+        assert move_result_msg is not None, (
+            f"Expected move_result event. Received: {[m['name'] for m in received]}"
+        )
+        assert move_result_msg['args'][0]['success'] is False
+        assert 'Game has ended' in move_result_msg['args'][0]['error']
+
+        # Clean up
+        result['sio_a'].disconnect()
+        result['sio_b'].disconnect()

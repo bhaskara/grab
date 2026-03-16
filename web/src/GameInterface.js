@@ -8,16 +8,18 @@ import PlayerWords from './PlayerWords';
 import WordInput from './WordInput';
 import GameLog from './GameLog';
 
-function GameInterface({ 
-  gameState, 
-  socket, 
+function GameInterface({
+  gameState,
+  socket,
   currentUsername,
   authToken,
   serverUrl,
   gameEvents,
   gameCreator,
   onAddGameEvent,
-  onLeaveGame 
+  onLeaveGame,
+  gameEndPending,
+  onShowGameOver
 }) {
   const [hasShownWelcome, setHasShownWelcome] = useState(false);
 
@@ -264,6 +266,50 @@ function GameInterface({
                 Game will begin automatically when started
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* End Game prompt — shown when bag is empty and all players have passed */}
+      {gameEndPending && (
+        <div style={{
+          backgroundColor: isCreator ? '#4a1a1a' : '#444',
+          border: isCreator ? '2px solid #dc3545' : '1px solid #666',
+          borderRadius: '8px',
+          padding: '20px',
+          textAlign: 'center',
+          marginBottom: '20px'
+        }}>
+          <h3 style={{ color: '#ffd700', margin: '0 0 10px 0' }}>
+            All tiles have been used!
+          </h3>
+
+          {isCreator ? (
+            <div>
+              <p style={{ color: '#aaa', margin: '0 0 15px 0' }}>
+                Review the final board, then click below to see the results.
+              </p>
+              <button
+                onClick={onShowGameOver}
+                style={{
+                  padding: '15px 30px',
+                  backgroundColor: '#dc3545',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '18px',
+                  fontWeight: 'bold',
+                  boxShadow: '0 4px 8px rgba(220, 53, 69, 0.3)'
+                }}
+              >
+                End Game
+              </button>
+            </div>
+          ) : (
+            <p style={{ color: '#aaa', margin: '0' }}>
+              Waiting for the game creator to end the game...
+            </p>
           )}
         </div>
       )}

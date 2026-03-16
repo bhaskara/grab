@@ -7,6 +7,7 @@ handling player connections, moves, and game state broadcasting.
 
 import json
 import jwt
+import numpy as np
 from flask import request, current_app
 from flask_socketio import emit, join_room, leave_room, disconnect
 from loguru import logger
@@ -127,14 +128,19 @@ def init_socketio_handlers(socketio):
                 return
             
             game_data = game_server.games[game_id]
-            
+
+            # Guard: reject moves on finished games
+            if game_data.get('status') == 'finished':
+                emit('move_result', {'success': False, 'error': 'Game has ended'})
+                return
+
             # Get the actual game object
             if 'game_object' in game_data:
                 game = game_data['game_object']
             else:
                 emit('move_result', {'success': False, 'error': 'Game not started'})
                 return
-            
+
             # Make the move - convert username to player index for Grab games
             if hasattr(game, 'handle_action'):
                 # This is a Grab game - need to convert username to player index
@@ -150,6 +156,11 @@ def init_socketio_handlers(socketio):
                     # Use handle_action for Grab games
                     new_state, move = game.handle_action(player_index, action)
                     
+                    # Check if the game ended naturally
+                    if _check_and_handle_game_end(game_id, new_state, move, socketio):
+                        emit('move_result', {'success': True, 'game_state': _get_game_state(game_id)})
+                        return
+
                     # Check if letters were drawn and emit special event
                     if isinstance(move, DrawLetters):
                         letters_remaining = int(sum(new_state.bag))
@@ -159,23 +170,23 @@ def init_socketio_handlers(socketio):
                                 'letters_remaining_in_bag': letters_remaining
                             }
                         }, room=game_id)
-                        
+
                 except Exception as e:
                     emit('move_result', {'success': False, 'error': str(e)})
                     return
             else:
                 # This is a DummyGrab game - use send_move
                 game.send_move(username, move_data)
-            
+
             # Get updated game state
             game_state = _get_game_state(game_id)
-            
+
             # Send success response to the player
             emit('move_result', {
                 'success': True,
                 'game_state': game_state
             })
-            
+
             # Broadcast updated state to all players in the game
             print(f"[DEBUG] Broadcasting game_state to room {game_id}, room has {len(game_rooms.get(game_id, set()))} members")
             socketio.emit('game_state', {'data': game_state}, room=game_id)
@@ -230,14 +241,19 @@ def init_socketio_handlers(socketio):
                     return
                 
                 game_data = game_server.games[game_id]
-                
+
+                # Guard: reject actions on finished games
+                if game_data.get('status') == 'finished':
+                    emit('error', {'message': 'Game has ended'})
+                    return
+
                 # Get the actual game object
                 if 'game_object' in game_data:
                     game = game_data['game_object']
                 else:
                     emit('error', {'message': 'Game not started'})
                     return
-                
+
                 # Handle ready action - convert username to player index for Grab games
                 if hasattr(game, 'handle_action'):
                     # This is a Grab game - need to convert username to player index
@@ -245,11 +261,15 @@ def init_socketio_handlers(socketio):
                     if username not in players:
                         emit('error', {'message': f'Player {username} not found in game'})
                         return
-                    
+
                     player_index = players.index(username)
                     # Use handle_action for Grab games (0 = pass)
                     new_state, move = game.handle_action(player_index, 0)
-                    
+
+                    # Check if the game ended naturally
+                    if _check_and_handle_game_end(game_id, new_state, move, socketio):
+                        return
+
                     # Check if letters were drawn and emit special event
                     if isinstance(move, DrawLetters):
                         letters_remaining = int(sum(new_state.bag))
@@ -262,10 +282,10 @@ def init_socketio_handlers(socketio):
                 else:
                     # This is a DummyGrab game - use send_move
                     game.send_move(username, '')
-                
+
                 # Get updated game state
                 game_state = _get_game_state(game_id)
-                
+
                 # Broadcast updated state to all players
                 socketio.emit('game_state', {'data': game_state}, room=game_id)
                 
@@ -274,6 +294,68 @@ def init_socketio_handlers(socketio):
         else:
             emit('error', {'message': f'Unknown action: {action}'})
     
+
+
+def _check_and_handle_game_end(game_id, new_state, move, socketio):
+    """Check if the game has naturally ended and handle the transition.
+
+    A natural game end occurs when the bag is empty, all players have passed,
+    and no move was made (move is None). When detected, this function transitions
+    the game to 'finished' status, emits the ``game_ending`` event with final
+    scores, and broadcasts the final game state.
+
+    Parameters
+    ----------
+    game_id : str
+        The ID of the game to check.
+    new_state : State
+        The game state after the most recent action.
+    move : Move or None
+        The move that resulted from the action. ``None`` when all players
+        passed and the bag was already empty (i.e. ``end_game`` was called).
+    socketio : SocketIO
+        The Socket.IO server instance used to emit events.
+
+    Returns
+    -------
+    bool
+        ``True`` if the game ended and callers should stop further processing,
+        ``False`` otherwise.
+    """
+    if move is not None:
+        return False
+    if np.sum(new_state.bag) > 0:
+        return False
+    if not all(new_state.passed):
+        return False
+
+    # Game has naturally ended — transition state
+    game_server.finish_game(game_id)
+    game_server.set_game_state(game_id, 'done')
+
+    # Build final scores and determine winner
+    game_data = game_server.games[game_id]
+    _, players = game_server.get_game_info(game_id)
+    final_scores = {
+        players[i]: int(new_state.scores[i])
+        for i in range(len(players))
+    }
+    winner = max(final_scores, key=final_scores.get)
+
+    # Get final game state for the event payload
+    final_game_state = _get_game_state(game_id)
+
+    socketio.emit('game_ending', {
+        'reason': 'bag_empty',
+        'final_scores': final_scores,
+        'winner': winner,
+        'final_game_state': final_game_state,
+    }, room=game_id)
+
+    socketio.emit('game_state', {'data': final_game_state}, room=game_id)
+
+    logger.info(f"Game {game_id} ended naturally (bag empty, all passed). Winner: {winner}")
+    return True
 
 
 def _get_game_state(game_id):
