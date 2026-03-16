@@ -114,6 +114,39 @@ function GameInterface({
   const isGameActive = gameState.status === 'active';
   const isGameWaiting = gameState.status === 'waiting';
   const pool = parsedState.pool || [];
+  const bag = parsedState.bag || [];
+
+  /**
+   * Convert a 26-element letter count array to a shuffled string of letters.
+   *
+   * Parameters
+   * ----------
+   * counts : number[]
+   *     Array of 26 integers where index 0 = 'a', index 1 = 'b', etc.
+   *
+   * Returns
+   * -------
+   * string
+   *     Space-separated uppercase letters in random order.
+   */
+  const bagToShuffledString = (counts) => {
+    const letters = [];
+    for (let i = 0; i < 26; i++) {
+      const letter = String.fromCharCode(65 + i); // 'A' + i
+      for (let j = 0; j < (counts[i] || 0); j++) {
+        letters.push(letter);
+      }
+    }
+    // Fisher-Yates shuffle
+    for (let i = letters.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [letters[i], letters[j]] = [letters[j], letters[i]];
+    }
+    return letters.join(' ');
+  };
+
+  const remainingLetters = bagToShuffledString(bag);
+  const bagTotal = bag.reduce((sum, count) => sum + (count || 0), 0);
   
   // Check if current user is the game creator - use tracked creator
   const isCreator = gameCreator === currentUsername;
@@ -156,6 +189,11 @@ function GameInterface({
               <span> • Time: {gameState.turn_time_remaining}s</span>
             )}
           </div>
+          {isGameActive && bagTotal > 0 && (
+            <div style={{ color: '#aaa', fontSize: '14px', marginTop: '5px' }}>
+              Remaining letters ({bagTotal}): {remainingLetters}
+            </div>
+          )}
         </div>
         
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
