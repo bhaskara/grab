@@ -1586,3 +1586,71 @@ class TestGameEnd:
         # Clean up
         result['sio_a'].disconnect()
         result['sio_b'].disconnect()
+
+    def test_confirm_game_end_broadcast(self, client, app):
+        """Verify that confirm_game_end from the creator broadcasts show_game_over to all players."""
+        result = self._play_to_game_end(client, app)
+
+        # Clear any accumulated messages
+        result['sio_a'].get_received()
+        result['sio_b'].get_received()
+
+        # Creator (clientA) confirms game end
+        result['sio_a'].emit('confirm_game_end')
+
+        received_a = result['sio_a'].get_received()
+        received_b = result['sio_b'].get_received()
+
+        # Both players should receive show_game_over
+        show_a = [m for m in received_a if m['name'] == 'show_game_over']
+        show_b = [m for m in received_b if m['name'] == 'show_game_over']
+
+        assert len(show_a) == 1, (
+            f"Expected show_game_over for clientA. Received: {[m['name'] for m in received_a]}"
+        )
+        assert len(show_b) == 1, (
+            f"Expected show_game_over for clientB. Received: {[m['name'] for m in received_b]}"
+        )
+
+        # Payload should include final_scores and winner
+        payload_a = show_a[0]['args'][0]
+        assert 'final_scores' in payload_a
+        assert 'winner' in payload_a
+        assert payload_a['winner'] == 'clientA'
+        assert payload_a['final_scores']['clientA'] == 10
+        assert payload_a['final_scores']['clientB'] == 4
+
+        # Clean up
+        result['sio_a'].disconnect()
+        result['sio_b'].disconnect()
+
+    def test_confirm_game_end_rejected_for_non_creator(self, client, app):
+        """Verify that a non-creator cannot trigger confirm_game_end."""
+        result = self._play_to_game_end(client, app)
+
+        # Clear any accumulated messages
+        result['sio_a'].get_received()
+        result['sio_b'].get_received()
+
+        # Non-creator (clientB) attempts to confirm game end
+        result['sio_b'].emit('confirm_game_end')
+
+        received_b = result['sio_b'].get_received()
+        received_a = result['sio_a'].get_received()
+
+        # clientB should get an error
+        error_msgs = [m for m in received_b if m['name'] == 'error']
+        assert len(error_msgs) >= 1, (
+            f"Expected error for non-creator. Received: {[m['name'] for m in received_b]}"
+        )
+        assert 'creator' in error_msgs[0]['args'][0]['message'].lower()
+
+        # Neither client should have received show_game_over
+        show_a = [m for m in received_a if m['name'] == 'show_game_over']
+        show_b = [m for m in received_b if m['name'] == 'show_game_over']
+        assert len(show_a) == 0, "clientA should not receive show_game_over"
+        assert len(show_b) == 0, "clientB should not receive show_game_over"
+
+        # Clean up
+        result['sio_a'].disconnect()
+        result['sio_b'].disconnect()

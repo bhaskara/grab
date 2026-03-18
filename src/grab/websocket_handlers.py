@@ -293,7 +293,65 @@ def init_socketio_handlers(socketio):
                 emit('error', {'message': f'Action failed: {str(e)}'})
         else:
             emit('error', {'message': f'Unknown action: {action}'})
-    
+
+    @socketio.on('confirm_game_end')
+    def handle_confirm_game_end():
+        """Handle the creator confirming the game-over transition.
+
+        When the bag is empty and all players have passed, the game enters a
+        pending state where only the creator can trigger the game-over screen
+        for all players. This handler validates that the requesting player is
+        the authenticated game creator, then broadcasts a ``show_game_over``
+        event to every player in the game room so they all transition to the
+        game-over screen simultaneously.
+        """
+        if request.sid not in connected_players:
+            emit('error', {'message': 'Not authenticated'})
+            return
+
+        player_info = connected_players[request.sid]
+        game_id = player_info.get('game_id')
+        username = player_info['username']
+
+        if not game_id:
+            emit('error', {'message': 'Not in a game'})
+            return
+
+        if game_id not in game_server.games:
+            emit('error', {'message': 'Game not found'})
+            return
+
+        game_data = game_server.games[game_id]
+
+        # Only allow on finished games
+        if game_data.get('status') != 'finished':
+            emit('error', {'message': 'Game is not finished'})
+            return
+
+        # Only the creator may confirm the game end
+        if game_data.get('creator_username') != username:
+            emit('error', {'message': 'Only the game creator can confirm game end'})
+            return
+
+        # Build game-over payload from current state
+        _, players = game_server.get_game_info(game_id)
+        game = game_data.get('game_object')
+        if game and hasattr(game, 'state'):
+            final_scores = {
+                players[i]: int(game.state.scores[i])
+                for i in range(len(players))
+            }
+        else:
+            final_scores = {p: 0 for p in players}
+        winner = max(final_scores, key=final_scores.get) if final_scores else None
+
+        socketio.emit('show_game_over', {
+            'final_scores': final_scores,
+            'winner': winner,
+            'reason': 'bag_empty',
+        }, room=game_id)
+
+        logger.info(f"Game {game_id}: creator '{username}' confirmed game end, broadcast show_game_over")
 
 
 def _check_and_handle_game_end(game_id, new_state, move, socketio):

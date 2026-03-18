@@ -164,6 +164,33 @@ function App() {
         }, 5000);
       }
     });
+
+    // Server-mediated game-over transition (broadcast to all players)
+    newSocket.on('show_game_over', (data) => {
+      console.log('Show game over:', data);
+      setShowGameOver(true);
+      setGameEndPending(false);
+
+      // Populate gameOverData from event payload if not already set
+      setGameOverData(prev => prev || {
+        reason: data.reason || 'Game over',
+        final_scores: data.final_scores || {},
+        winner: data.winner || null,
+      });
+
+      // Auto-return to lobby after 5 seconds
+      setTimeout(() => {
+        setShowGameOver(false);
+        setGameOverData(null);
+        setInGame(false);
+        setGameState(null);
+        setCurrentGameId(null);
+        setGameEvents([]);
+        setGameCreator(null);
+        setGameEndPending(false);
+        setShowLobby(true);
+      }, 5000);
+    });
   };
 
   const connectSocketOnly = (token) => {
@@ -278,22 +305,12 @@ function App() {
     setShowLobby(true);
   };
 
-  // Called by the game creator to confirm showing the game over screen
+  // Called by the game creator to confirm showing the game over screen.
+  // Sends a server event so all players transition simultaneously.
   const handleShowGameOver = () => {
-    setShowGameOver(true);
-    setGameEndPending(false);
-
-    // Auto-return to lobby after 5 seconds
-    setTimeout(() => {
-      setShowGameOver(false);
-      setGameOverData(null);
-      setInGame(false);
-      setGameState(null);
-      setCurrentGameId(null);
-      setGameEvents([]);
-      setGameCreator(null);
-      setShowLobby(true);
-    }, 5000);
+    if (socket) {
+      socket.emit('confirm_game_end');
+    }
   };
 
   // Helper function to add game events
