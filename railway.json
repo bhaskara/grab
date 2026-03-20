@@ -5,8 +5,7 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "gunicorn --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 --bind 0.0.0.0:$PORT wsgi:app",
-    "restartPolicyType": "ON_FAILURE",
+"restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
 }
