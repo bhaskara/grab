@@ -1,0 +1,8 @@
+# Development and test dependencies.
+# Install with: uv pip install -r requirements.txt -r requirements-dev.txt
+-r requirements.txt
+pytest==7.4.2
+pytest-flask==1.2.0
+requests==2.31.0
+python-socketio[client]==5.8.0
+honcho
