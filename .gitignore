@@ -193,6 +193,8 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+node_modules/
+
 .claude
 
 # Temporary/backup files

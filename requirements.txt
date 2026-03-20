@@ -9,3 +9,6 @@ pytest-flask==1.2.0
 requests==2.31.0
 python-socketio[client]==5.8.0
 honcho
+gunicorn==22.0.0
+gevent==25.9.1
+gevent-websocket==0.10.1

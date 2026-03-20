@@ -28,10 +28,14 @@ function App() {
     const randomUsername = `user${Math.floor(Math.random() * 10000)}`;
     setUsername(randomUsername);
     
-    // Determine server URL
-    const serverUrl = window.location.hostname === 'localhost'
-      ? 'http://localhost:5001'  // Local development
-      : `http://${window.location.hostname}:5001`;  // External access
+    // Determine server URL:
+    // - REACT_APP_SERVER_URL env var overrides everything (custom setups)
+    // - localhost → dev mode, use port 5001 (Flask dev server)
+    // - Otherwise → production, use same origin (handles HTTPS/WSS automatically)
+    const serverUrl = process.env.REACT_APP_SERVER_URL
+      || (window.location.hostname === 'localhost'
+        ? 'http://localhost:5001'
+        : window.location.origin);
     
     setServerUrl(serverUrl);
     console.log('Server URL:', serverUrl);
